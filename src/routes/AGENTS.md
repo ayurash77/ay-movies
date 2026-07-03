@@ -15,6 +15,13 @@
 - `__root.tsx` отвечает за sidebar, header, profile/theme dialogs, Toaster и специальный layout `/chat`.
 - Для `/chat` root фиксируется по высоте viewport: `h-svh overflow-hidden`; не возвращай общий body/page scroll для активного диалога.
 - Header title приходит из `AppTitleProvider`.
+- На основных страницах каталога header показывает icon-only кнопку добавления: `/` открывает dropdown выбора типа, `/movies?kind=...` ведет сразу к добавлению этого типа.
+
+## Dashboard/Friends
+
+- `/dashboard` — admin-only администрирование пользователей.
+- `/friends` — пользовательская страница друзей, открывается из dropdown пользователя.
+- Профиль пользователя все еще живет на `/dashboard/$userId`; для обычных пользователей back button ведет на `/friends`.
 
 ## Chat route
 

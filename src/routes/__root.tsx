@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createRootRoute, HeadContent, Link, Outlet, Scripts, useLocation } from '@tanstack/react-router';
-import { ArrowLeft, Film, Menu } from 'lucide-react';
+import { ArrowLeft, Film, Menu, Plus } from 'lucide-react';
 import { Toaster } from 'sonner';
 
 import appCss from '../styles.css?url';
@@ -9,8 +9,15 @@ import { ProfileDialog } from '@/components/ProfileDialog';
 import { Sidebar } from '@/components/Sidebar';
 import { ThemeDialog } from '@/components/ThemeDialog';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { getSessionUser } from '@/server/auth';
+import { movieKindOptions, type MovieKind } from '@/lib/movie-data';
 import { applyTheme, getStoredTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 
@@ -44,12 +51,18 @@ function RootComponent() {
 
 function RootLayout() {
     const { user } = Route.useRouteContext();
-    const { pathname } = useLocation();
+    const { pathname, searchStr } = useLocation();
     const appTitle = useAppTitle();
     const [ isMobileMenuOpen, setIsMobileMenuOpen ] = useState(false);
     const [ isProfileOpen, setIsProfileOpen ] = useState(false);
     const [ isThemeOpen, setIsThemeOpen ] = useState(false);
     const isChatRoute = pathname.startsWith('/chat');
+    const searchParams = new URLSearchParams(searchStr);
+    const rawMovieKind = searchParams.get('kind');
+    const addMovieKind = pathname === '/movies' && movieKindOptions.includes(rawMovieKind as MovieKind)
+        ? rawMovieKind as MovieKind
+        : null;
+    const showHeaderAdd = Boolean(user && (pathname === '/' || pathname === '/movies'));
 
     useEffect(() => {
         applyTheme(getStoredTheme(user?.id ?? null));
@@ -81,6 +94,42 @@ function RootLayout() {
                 />
             </SheetContent>
         </Sheet>
+    );
+
+    const headerAddButton = !showHeaderAdd ? null : addMovieKind ? (
+        <Button asChild variant="ghost" size="icon" className="ml-auto" aria-label="Добавить">
+            <Link to="/movies/new" search={{ kind: addMovieKind }}>
+                <Plus/>
+            </Link>
+        </Button>
+    ) : (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="ml-auto" aria-label="Добавить">
+                    <Plus/>
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                    <Link to="/movies/new" search={{ kind: 'MOVIE' }}>
+                        <Film/>
+                        Фильм
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <Link to="/movies/new" search={{ kind: 'SERIES' }}>
+                        <Film/>
+                        Сериал
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <Link to="/movies/new" search={{ kind: 'CARTOON' }}>
+                        <Film/>
+                        Мультфильм
+                    </Link>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 
     return (
@@ -120,14 +169,7 @@ function RootLayout() {
                             </>
                         </Link>
                     )}
-                    {!appTitle ? null : (
-                        <Link to="/" className="ml-auto hidden items-center gap-2 text-sm font-bold tracking-tight text-muted-foreground transition-colors hover:text-foreground md:flex">
-                            <Film className="size-4 text-primary"/>
-                            <>
-                                Movie<span className="text-primary">Nest</span>
-                            </>
-                        </Link>
-                    )}
+                    {headerAddButton}
                 </header>
 
                 <main className={isChatRoute ? 'mx-auto flex h-[calc(100svh-3.5rem)] min-h-0 w-full max-w-6xl flex-1 overflow-hidden px-3 py-0 md:px-4 md:py-5' : 'mx-auto w-full max-w-6xl flex-1 px-4 py-5'}>

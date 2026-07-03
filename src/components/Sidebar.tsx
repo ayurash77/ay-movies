@@ -108,9 +108,6 @@ export function Sidebar({
     const urlKind = pathname === '/movies'
         ? searchParams.get('kind') ?? ''
         : '';
-    const dashboardTab = pathname === '/dashboard'
-        ? searchParams.get('tab') ?? ''
-        : '';
     const [ query, setQuery ] = useState(urlQuery);
     const [ counts, setCounts ] = useState<SidebarCounts>(emptyCounts);
 
@@ -225,27 +222,6 @@ export function Sidebar({
                         Мультфильмы
                         <NavCount value={counts.cartoons}/>
                     </Link>
-                    {user ? (
-                        <Link
-                            to="/dashboard"
-                            className={cn(navLinkClass, pathname === '/dashboard' && (!dashboardTab || dashboardTab === 'movies') && navLinkActive)}
-                        >
-                            <LayoutDashboard/>
-                            Дашборд
-                            <NavCount value={counts.myMovies}/>
-                        </Link>
-                    ) : null}
-                    {user ? (
-                        <Link
-                            to="/dashboard"
-                            search={{ tab: 'friends' }}
-                            className={cn(navLinkClass, pathname === '/dashboard' && dashboardTab === 'friends' && navLinkActive)}
-                        >
-                            <Users/>
-                            Друзья
-                            <NavCount value={counts.friends}/>
-                        </Link>
-                    ) : null}
                     {user ? (
                         <Link
                             to="/chat"
@@ -370,6 +346,17 @@ export function Sidebar({
                                     <UserRound/>
                                     Открыть профиль
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => navigate({ to: '/friends' })}>
+                                    <Users/>
+                                    <span className="min-w-0 flex-1">Друзья</span>
+                                    <NavCount value={counts.friends}/>
+                                </DropdownMenuItem>
+                                {user.role === 'ADMIN' ? (
+                                    <DropdownMenuItem onSelect={() => navigate({ to: '/dashboard' })}>
+                                        <LayoutDashboard/>
+                                        Dashboard
+                                    </DropdownMenuItem>
+                                ) : null}
                                 <DropdownMenuSeparator/>
                                 <DropdownMenuItem
                                     onSelect={handleSignOut}

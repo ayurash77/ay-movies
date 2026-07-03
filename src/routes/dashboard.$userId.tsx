@@ -86,9 +86,9 @@ function UserProfilePage() {
             <div className="flex flex-col items-center gap-3 py-16 text-center">
                 <UserRound className="size-10 text-muted-foreground/60"/>
                 <p className="text-sm text-muted-foreground">{result?.error ?? 'Пользователь не найден'}</p>
-                <Button variant="outline" onClick={() => navigate({ to: '/dashboard' })}>
+                <Button variant="outline" onClick={() => navigate({ to: '/friends' })}>
                     <ArrowLeft/>
-                    К дашборду
+                    К друзьям
                 </Button>
             </div>
         );
@@ -96,6 +96,8 @@ function UserProfilePage() {
 
     const user = result.user;
     const joined = formatRuDate(user.createdAt);
+    const backTo = user.canManage ? '/dashboard' : '/friends';
+    const backLabel = user.canManage ? 'К Dashboard' : 'К друзьям';
 
     const toggleFriend = async () => {
         try {
@@ -148,9 +150,9 @@ function UserProfilePage() {
     return (
         <div className="flex flex-col gap-6">
             <PageTitle title={user.name}/>
-            <Button variant="ghost" size="sm" className="w-fit -ml-2" onClick={() => navigate({ to: '/dashboard' })}>
+            <Button variant="ghost" size="sm" className="w-fit -ml-2" onClick={() => navigate({ to: backTo })}>
                 <ArrowLeft/>
-                К дашборду
+                {backLabel}
             </Button>
 
             <Card>
