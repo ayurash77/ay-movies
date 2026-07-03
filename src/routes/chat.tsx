@@ -139,12 +139,14 @@ function MessageActions({
 function MessageBubble({
     message,
     busy,
+    onMediaLoad,
     onReply,
     onEdit,
     onDelete,
 }: {
     message: ChatMessageData;
     busy: boolean;
+    onMediaLoad: () => void;
     onReply: (message: ChatMessageData) => void;
     onEdit: (message: ChatMessageData) => void;
     onDelete: (message: ChatMessageData) => void;
@@ -188,7 +190,7 @@ function MessageBubble({
                         rel="noreferrer"
                         className="mb-2 block overflow-hidden rounded-xl"
                     >
-                        <img src={message.imageUrl} alt="" className="max-h-80 w-full object-cover"/>
+                        <img src={message.imageUrl} alt="" className="max-h-80 w-full object-cover" onLoad={onMediaLoad}/>
                     </a>
                 ) : null}
                 {message.text ? (
@@ -218,11 +220,12 @@ function ChatPage() {
     const [ imagePreviewUrl, setImagePreviewUrl ] = useState<string | null>(null);
     const [ isSending, setIsSending ] = useState(false);
     const [ busyMessageId, setBusyMessageId ] = useState<string | null>(null);
-    const bottomRef = useRef<HTMLDivElement | null>(null);
+    const messagesRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
     const fileRef = useRef<HTMLInputElement | null>(null);
     const imagePreviewRef = useRef<string | null>(null);
     const activeThreadId = data.ok ? data.activeThread?.id ?? null : null;
+    const hasComposerPreview = Boolean(replyTo || editingMessage || imagePreviewUrl);
 
     const clearImageDraft = useCallback(() => {
         if (imagePreviewRef.current) {
@@ -234,6 +237,18 @@ function ChatPage() {
         if (fileRef.current) fileRef.current.value = '';
     }, []);
 
+    const scrollMessagesToBottom = useCallback(() => {
+        const node = messagesRef.current;
+        if (!node) return;
+
+        window.requestAnimationFrame(() => {
+            node.scrollTo({ top: node.scrollHeight });
+            window.requestAnimationFrame(() => {
+                node.scrollTo({ top: node.scrollHeight });
+            });
+        });
+    }, []);
+
     useEffect(() => {
         const timer = window.setInterval(async () => {
             await router.invalidate();
@@ -243,9 +258,9 @@ function ChatPage() {
     }, [ activeThreadId, router ]);
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ block: 'end' });
+        scrollMessagesToBottom();
         if (activeThreadId) notifyChatChanged();
-    }, [ activeThreadId, data.ok ? data.messages.length : 0 ]);
+    }, [ activeThreadId, data.ok ? data.messages.length : 0, hasComposerPreview, scrollMessagesToBottom ]);
 
     useEffect(() => {
         setReplyTo(null);
@@ -393,7 +408,6 @@ function ChatPage() {
     const messages = data.ok ? data.messages : [];
     const activeThread = data.ok ? data.activeThread : null;
     const title = activeThread?.friend?.name ?? 'Чат';
-    const hasComposerPreview = Boolean(replyTo || editingMessage || imagePreviewUrl);
 
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col">
@@ -432,6 +446,7 @@ function ChatPage() {
                                 </div>
                             </div>
                             <div
+                                ref={messagesRef}
                                 className={cn(
                                     'min-h-0 flex-1 overflow-y-auto px-0 pt-2 md:px-4 md:pt-3',
                                     hasComposerPreview ? 'pb-40' : 'pb-24',
@@ -444,12 +459,12 @@ function ChatPage() {
                                                 key={message.id}
                                                 message={message}
                                                 busy={busyMessageId === message.id}
+                                                onMediaLoad={scrollMessagesToBottom}
                                                 onReply={handleReply}
                                                 onEdit={handleEdit}
                                                 onDelete={handleDelete}
                                             />
                                         ))}
-                                        <div ref={bottomRef}/>
                                     </div>
                                 ) : (
                                     <p className="py-16 text-center text-sm text-muted-foreground">
