@@ -97,7 +97,7 @@ function RootLayout() {
     );
 
     const headerAddButton = !showHeaderAdd ? null : addMovieKind ? (
-        <Button asChild size="icon" className="ml-auto" aria-label="Добавить">
+        <Button asChild size="sm" className="ml-auto w-8 px-0" aria-label="Добавить">
             <Link to="/movies/new" search={{ kind: addMovieKind }}>
                 <Plus/>
             </Link>
@@ -105,7 +105,7 @@ function RootLayout() {
     ) : (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button size="icon" className="ml-auto" aria-label="Добавить">
+                <Button size="sm" className="ml-auto w-8 px-0" aria-label="Добавить">
                     <Plus/>
                 </Button>
             </DropdownMenuTrigger>
