@@ -75,6 +75,7 @@ model Movie {
   description       String
   posterUrl         String?
   trailerUrl        String?
+  watchLinks        String[]       @default([])
   director          String?
   genres            String[]
   durationMin       Int?

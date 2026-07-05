@@ -43,6 +43,14 @@ function seriesMeta(movie: { seasonsCount: number | null; episodesPerSeason: num
     return [ seasons, episodes ].filter(Boolean).join(' · ');
 }
 
+function watchLinkLabel(url: string) {
+    try {
+        return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+        return url;
+    }
+}
+
 export const Route = createFileRoute('/movies/$movieId')({
     loader: async ({ params }) => {
         const [ movie, comments ] = await Promise.all([
@@ -199,6 +207,25 @@ function MoviePage() {
                                     </a>
                                 </Button>
                             )}
+                        </section>
+                    ) : null}
+
+                    {movie.watchLinks.length > 0 ? (
+                        <section className="flex flex-col gap-3">
+                            <h2 className="flex items-center gap-2 text-lg font-semibold">
+                                <Globe className="size-5 text-primary"/>
+                                Где смотреть
+                            </h2>
+                            <div className="flex flex-wrap gap-2">
+                                {movie.watchLinks.map((url, index) => (
+                                    <Button key={`${url}-${index}`} asChild variant="outline" size="sm">
+                                        <a href={url} target="_blank" rel="noreferrer">
+                                            {watchLinkLabel(url)}
+                                            <ExternalLink/>
+                                        </a>
+                                    </Button>
+                                ))}
+                            </div>
                         </section>
                     ) : null}
 

@@ -264,6 +264,7 @@ export const getMovie = createServerFn({ method: 'GET' })
             description: movie.description,
             posterUrl: toServedUploadUrl(movie.posterUrl),
             trailerUrl: movie.trailerUrl,
+            watchLinks: movie.watchLinks,
             director: movie.director,
             genres: movie.genres,
             starring: movie.starring,
@@ -295,6 +296,23 @@ const movieFieldsSchema = z.object({
         ])
         .optional(),
     trailerUrl: z.union([ z.literal(''), z.string().trim().url() ]).optional(),
+    watchLinks: z
+        .array(
+            z
+                .string()
+                .trim()
+                .url()
+                .refine((value) => {
+                    try {
+                        const url = new URL(value);
+                        return url.protocol === 'http:' || url.protocol === 'https:';
+                    } catch {
+                        return false;
+                    }
+                }, 'Укажите корректные http/https ссылки'),
+        )
+        .max(20)
+        .optional(),
     director: z.string().trim().max(200).optional(),
     genres: z.string().trim().max(300).optional(),
     starring: z.string().trim().max(500).optional(),
@@ -316,6 +334,7 @@ function toMovieData(data: z.output<typeof movieFieldsSchema>) {
         description: data.description,
         posterUrl: toServedUploadUrl(data.posterUrl) || null,
         trailerUrl: data.trailerUrl || null,
+        watchLinks: data.watchLinks ?? [],
         director: data.director || null,
         genres: splitList(data.genres),
         starring: splitList(data.starring),

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,21 @@ const KIND_LABELS: Record<NonNullable<MovieFormFields['kind']>, string> = {
 export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
     const [ isSubmitting, setIsSubmitting ] = useState(false);
     const [ kind, setKind ] = useState<NonNullable<MovieFormFields['kind']>>(defaults?.kind ?? 'MOVIE');
+    const [ watchLinks, setWatchLinks ] = useState<string[]>(
+        defaults?.watchLinks?.length ? defaults.watchLinks : [ '' ],
+    );
     const posterPreviewUrl = defaults?.posterUrl?.trim();
+
+    const updateWatchLink = (index: number, value: string) => {
+        setWatchLinks((current) => current.map((link, i) => (i === index ? value : link)));
+    };
+
+    const removeWatchLink = (index: number) => {
+        setWatchLinks((current) => {
+            const next = current.filter((_, i) => i !== index);
+            return next.length ? next : [ '' ];
+        });
+    };
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -52,6 +67,7 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                 description: String(form.get('description') ?? ''),
                 posterUrl,
                 trailerUrl: String(form.get('trailerUrl') ?? ''),
+                watchLinks: watchLinks.map((link) => link.trim()).filter(Boolean),
                 director: String(form.get('director') ?? ''),
                 genres: String(form.get('genres') ?? ''),
                 starring: String(form.get('starring') ?? ''),
@@ -220,6 +236,41 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                     placeholder="https://..."
                     defaultValue={defaults?.trailerUrl ?? ''}
                 />
+            </div>
+
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="watchLinks">Где смотреть</Label>
+                <div className="flex flex-col gap-2">
+                    {watchLinks.map((link, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                            <Input
+                                id={index === 0 ? 'watchLinks' : undefined}
+                                value={link}
+                                onChange={(event) => updateWatchLink(index, event.currentTarget.value)}
+                                placeholder="https://..."
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                aria-label="Удалить ссылку"
+                                onClick={() => removeWatchLink(index)}
+                            >
+                                <X/>
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-start"
+                    onClick={() => setWatchLinks((current) => [ ...current, '' ])}
+                >
+                    <Plus/>
+                    Добавить ссылку
+                </Button>
             </div>
 
             {posterPreviewUrl ? (
