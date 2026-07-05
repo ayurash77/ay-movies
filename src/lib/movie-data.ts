@@ -46,7 +46,7 @@ export type MovieDetails = {
     country: string;
     description: string;
     posterUrl: string | null;
-    trailerUrl: string | null;
+    trailerUrls: string[];
     watchLinks: string[];
     director: string | null;
     genres: string[];
@@ -70,7 +70,7 @@ export type MovieFormFields = {
     country: string;
     description: string;
     posterUrl?: string;
-    trailerUrl?: string;
+    trailerUrls?: string[];
     watchLinks?: string[];
     director?: string;
     genres?: string;

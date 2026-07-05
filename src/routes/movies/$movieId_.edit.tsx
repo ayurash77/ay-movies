@@ -61,7 +61,7 @@ function EditMoviePage() {
                             country: movie.country,
                             description: movie.description,
                             posterUrl: movie.posterUrl ?? '',
-                            trailerUrl: movie.trailerUrl ?? '',
+                            trailerUrls: movie.trailerUrls,
                             watchLinks: movie.watchLinks,
                             director: movie.director ?? '',
                             genres: movie.genres.join(', '),

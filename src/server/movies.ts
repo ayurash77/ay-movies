@@ -263,7 +263,7 @@ export const getMovie = createServerFn({ method: 'GET' })
             country: movie.country,
             description: movie.description,
             posterUrl: toServedUploadUrl(movie.posterUrl),
-            trailerUrl: movie.trailerUrl,
+            trailerUrls: movie.trailerUrls,
             watchLinks: movie.watchLinks,
             director: movie.director,
             genres: movie.genres,
@@ -281,6 +281,26 @@ export const getMovie = createServerFn({ method: 'GET' })
         };
     });
 
+function isHttpUrl(value: string) {
+    try {
+        const url = new URL(value);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
+const urlListSchema = z
+    .array(
+        z
+            .string()
+            .trim()
+            .url()
+            .refine(isHttpUrl, 'Укажите корректные http/https ссылки'),
+    )
+    .max(20)
+    .optional();
+
 const movieFieldsSchema = z.object({
     kind: z.enum(movieKindOptions).optional(),
     title: z.string().trim().min(1).max(200),
@@ -295,24 +315,8 @@ const movieFieldsSchema = z.object({
             z.string().trim().regex(/^\/(?:uploads\/)?posters\/[\w.-]+$/),
         ])
         .optional(),
-    trailerUrl: z.union([ z.literal(''), z.string().trim().url() ]).optional(),
-    watchLinks: z
-        .array(
-            z
-                .string()
-                .trim()
-                .url()
-                .refine((value) => {
-                    try {
-                        const url = new URL(value);
-                        return url.protocol === 'http:' || url.protocol === 'https:';
-                    } catch {
-                        return false;
-                    }
-                }, 'Укажите корректные http/https ссылки'),
-        )
-        .max(20)
-        .optional(),
+    trailerUrls: urlListSchema,
+    watchLinks: urlListSchema,
     director: z.string().trim().max(200).optional(),
     genres: z.string().trim().max(300).optional(),
     starring: z.string().trim().max(500).optional(),
@@ -333,7 +337,7 @@ function toMovieData(data: z.output<typeof movieFieldsSchema>) {
         country: data.country,
         description: data.description,
         posterUrl: toServedUploadUrl(data.posterUrl) || null,
-        trailerUrl: data.trailerUrl || null,
+        trailerUrls: data.trailerUrls ?? [],
         watchLinks: data.watchLinks ?? [],
         director: data.director || null,
         genres: splitList(data.genres),

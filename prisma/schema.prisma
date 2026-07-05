@@ -74,7 +74,7 @@ model Movie {
   country           String
   description       String
   posterUrl         String?
-  trailerUrl        String?
+  trailerUrls       String[]       @default([])
   watchLinks        String[]       @default([])
   director          String?
   genres            String[]

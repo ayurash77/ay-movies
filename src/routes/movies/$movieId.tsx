@@ -12,8 +12,7 @@ import { formatRating } from '@/lib/utils';
 import { getComments } from '@/server/comments';
 import { getMovie, rateMovie } from '@/server/movies';
 
-function trailerEmbedUrl(url: string | null) {
-    if (!url) return null;
+function trailerEmbedUrl(url: string) {
     try {
         const parsed = new URL(url);
         if (parsed.hostname.includes('youtube.com')) {
@@ -75,7 +74,6 @@ function MoviePage() {
     const { movie, comments } = Route.useLoaderData();
     const { user } = Route.useRouteContext();
     const router = useRouter();
-    const trailerUrl = trailerEmbedUrl(movie.trailerUrl);
 
     const handleRate = async (value: number) => {
         const result = await rateMovie({ data: { movieId: movie.id, value } });
@@ -182,31 +180,39 @@ function MoviePage() {
                         {movie.description}
                     </p>
 
-                    {movie.trailerUrl ? (
+                    {movie.trailerUrls.length > 0 ? (
                         <section className="flex flex-col gap-3">
                             <h2 className="flex items-center gap-2 text-lg font-semibold">
                                 <Clapperboard className="size-5 text-primary"/>
-                                Трейлер
+                                {movie.trailerUrls.length > 1 ? 'Трейлеры' : 'Трейлер'}
                             </h2>
-                            {trailerUrl ? (
-                                <div className="aspect-video overflow-hidden rounded-lg border border-border bg-background">
-                                    <iframe
-                                        src={trailerUrl}
-                                        title={`Трейлер: ${movie.title}`}
-                                        className="size-full"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                        allowFullScreen
-                                    />
-                                </div>
-                            ) : (
-                                <Button asChild variant="outline" className="self-start">
-                                    <a href={movie.trailerUrl} target="_blank" rel="noreferrer">
-                                        <PlayCircle/>
-                                        Открыть трейлер
-                                        <ExternalLink/>
-                                    </a>
-                                </Button>
-                            )}
+                            <div className="flex flex-col gap-3">
+                                {movie.trailerUrls.map((url, index) => {
+                                    const embedUrl = trailerEmbedUrl(url);
+                                    return embedUrl ? (
+                                        <div
+                                            key={`${url}-${index}`}
+                                            className="aspect-video overflow-hidden rounded-lg border border-border bg-background"
+                                        >
+                                            <iframe
+                                                src={embedUrl}
+                                                title={`Трейлер ${index + 1}: ${movie.title}`}
+                                                className="size-full"
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                                allowFullScreen
+                                            />
+                                        </div>
+                                    ) : (
+                                        <Button key={`${url}-${index}`} asChild variant="outline" className="self-start">
+                                            <a href={url} target="_blank" rel="noreferrer">
+                                                <PlayCircle/>
+                                                Открыть трейлер {movie.trailerUrls.length > 1 ? index + 1 : ''}
+                                                <ExternalLink/>
+                                            </a>
+                                        </Button>
+                                    );
+                                })}
+                            </div>
                         </section>
                     ) : null}
 
