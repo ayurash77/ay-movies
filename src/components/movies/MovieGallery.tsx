@@ -38,11 +38,25 @@ function originGroup(movie: MovieCardData) {
         : 'Зарубежные';
 }
 
+function movieGenres(movie: MovieCardData) {
+    return movie.genres.length ? movie.genres : [ 'Без жанра' ];
+}
+
 function groupBy<T extends string>(movies: MovieCardData[], key: (movie: MovieCardData) => T) {
     const map = new Map<T, MovieCardData[]>();
     for (const movie of movies) {
         const group = key(movie);
         map.set(group, [ ...(map.get(group) ?? []), movie ]);
+    }
+    return map;
+}
+
+function groupByMany<T extends string>(movies: MovieCardData[], key: (movie: MovieCardData) => T[]) {
+    const map = new Map<T, MovieCardData[]>();
+    for (const movie of movies) {
+        for (const group of key(movie)) {
+            map.set(group, [ ...(map.get(group) ?? []), movie ]);
+        }
     }
     return map;
 }
@@ -60,6 +74,7 @@ function MovieGrid({ movies }: { movies: MovieCardData[] }) {
 export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: MovieGalleryProps) {
     const [ groupByOrigin, setGroupByOrigin ] = useState(true);
     const [ groupByCountry, setGroupByCountry ] = useState(false);
+    const [ groupByGenre, setGroupByGenre ] = useState(false);
     const [ hiddenCountries, setHiddenCountries ] = useState<Set<string>>(() => new Set());
 
     const countries = useMemo(
@@ -81,6 +96,28 @@ export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: 
         });
     };
 
+    const renderGenreGroups = (items: MovieCardData[]) => {
+        const groups = [ ...groupByMany(items, movieGenres).entries() ]
+            .sort(([ a ], [ b ]) => a.localeCompare(b, 'ru'));
+
+        return (
+            <div className="flex flex-col gap-6">
+                {groups.map(([ genre, genreMovies ]) => (
+                    <section key={genre} className="flex flex-col gap-3">
+                        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                            {genre}
+                        </h3>
+                        <MovieGrid movies={genreMovies}/>
+                    </section>
+                ))}
+            </div>
+        );
+    };
+
+    const renderLeaf = (items: MovieCardData[]) => (
+        groupByGenre ? renderGenreGroups(items) : <MovieGrid movies={items}/>
+    );
+
     const renderCountryGroups = (items: MovieCardData[]) => {
         const groups = [ ...groupBy(items, primaryCountry).entries() ]
             .sort(([ a ], [ b ]) => a.localeCompare(b, 'ru'));
@@ -92,7 +129,7 @@ export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: 
                         <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                             {country}
                         </h3>
-                        <MovieGrid movies={countryMovies}/>
+                        {renderLeaf(countryMovies)}
                     </section>
                 ))}
             </div>
@@ -123,7 +160,7 @@ export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: 
                                 <h2 className="text-xl font-bold">{title}</h2>
                                 {groupByCountry
                                     ? renderCountryGroups(items)
-                                    : <MovieGrid movies={items}/>}
+                                    : renderLeaf(items)}
                             </section>
                         );
                     })}
@@ -132,6 +169,7 @@ export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: 
         }
 
         if (groupByCountry) return renderCountryGroups(visibleMovies);
+        if (groupByGenre) return renderGenreGroups(visibleMovies);
         return <MovieGrid movies={visibleMovies}/>;
     };
 
@@ -151,6 +189,7 @@ export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: 
                                 onSelect={() => {
                                     setGroupByOrigin(true);
                                     setGroupByCountry(true);
+                                    setGroupByGenre(true);
                                 }}
                             >
                                 Отметить все
@@ -159,6 +198,7 @@ export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: 
                                 onSelect={() => {
                                     setGroupByOrigin(false);
                                     setGroupByCountry(false);
+                                    setGroupByGenre(false);
                                 }}
                             >
                                 Снять все
@@ -175,6 +215,12 @@ export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: 
                                 onCheckedChange={(checked) => setGroupByCountry(Boolean(checked))}
                             >
                                 Страны
+                            </DropdownMenuCheckboxItem>
+                            <DropdownMenuCheckboxItem
+                                checked={groupByGenre}
+                                onCheckedChange={(checked) => setGroupByGenre(Boolean(checked))}
+                            >
+                                Жанры
                             </DropdownMenuCheckboxItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

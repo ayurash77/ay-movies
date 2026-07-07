@@ -13,6 +13,7 @@ export type MovieCardData = {
     title: string;
     year: number;
     country: string;
+    genres: string[];
     posterUrl: string | null;
     seasonsCount: number | null;
     episodesPerSeason: number[];

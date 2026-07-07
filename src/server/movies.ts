@@ -57,6 +57,7 @@ export async function toMovieCards(ids: string[]): Promise<Map<string, MovieCard
                     title: movie.title,
                     year: movie.year,
                     country: movie.country,
+                    genres: movie.genres,
                     posterUrl: toServedUploadUrl(movie.posterUrl),
                     seasonsCount: movie.seasonsCount,
                     episodesPerSeason: movie.episodesPerSeason,
