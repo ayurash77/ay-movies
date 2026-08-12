@@ -1,21 +1,21 @@
 services:
   postgres:
     image: postgres:18
-    container_name: movienest-postgres
+    container_name: ay-movies-postgres
     restart: unless-stopped
     ports:
       - "${POSTGRES_PORT:-5434}:5432"
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-movienest}
-      POSTGRES_USER: ${POSTGRES_USER:-movienest}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-movienest}
+      POSTGRES_DB: ${POSTGRES_DB:-ay_movies}
+      POSTGRES_USER: ${POSTGRES_USER:-ay_movies}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ay_movies}
     volumes:
-      - movienest_pg_data:/var/lib/postgresql
+      - ay_movies_pg_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-movienest} -d ${POSTGRES_DB:-movienest}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ay_movies} -d ${POSTGRES_DB:-ay_movies}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
 volumes:
-  movienest_pg_data:
+  ay_movies_pg_data:

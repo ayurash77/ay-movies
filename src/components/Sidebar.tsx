@@ -141,13 +141,13 @@ export function Sidebar({
 
         void refresh();
         const timer = window.setInterval(refresh, 12000);
-        window.addEventListener('movienest:notifications-changed', handleChanged);
-        window.addEventListener('movienest:chat-changed', handleChanged);
+        window.addEventListener('ay-movies:notifications-changed', handleChanged);
+        window.addEventListener('ay-movies:chat-changed', handleChanged);
         return () => {
             cancelled = true;
             window.clearInterval(timer);
-            window.removeEventListener('movienest:notifications-changed', handleChanged);
-            window.removeEventListener('movienest:chat-changed', handleChanged);
+            window.removeEventListener('ay-movies:notifications-changed', handleChanged);
+            window.removeEventListener('ay-movies:chat-changed', handleChanged);
         };
     }, [ user, pathname ]);
 

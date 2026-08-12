@@ -26,7 +26,7 @@ export const Route = createRootRoute({
         meta: [
             { charSet: 'utf-8' },
             { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-            { title: 'MovieNest — библиотека фильмов' },
+            { title: 'AY Movies — библиотека фильмов' },
         ],
         links: [
             { rel: 'stylesheet', href: appCss },
@@ -177,7 +177,7 @@ function RootLayout() {
                 </main>
                 {!isChatRoute ? (
                     <footer className="border-t border-border py-4 text-center text-xs text-muted-foreground">
-                        MovieNest — ваша библиотека фильмов
+                        AY Movies — ваша библиотека фильмов
                     </footer>
                 ) : null}
             </div>
@@ -197,7 +197,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             <body>
                 <script
                     dangerouslySetInnerHTML={{
-                        __html: "try{const t=localStorage.getItem('movienest:theme');document.documentElement.dataset.theme=['ayu','catppuccin','onedark','shotmate'].includes(t)?t:'ayu';}catch{document.documentElement.dataset.theme='ayu'}",
+                        __html: "try{const t=localStorage.getItem('ay-movies:theme');document.documentElement.dataset.theme=['ayu','catppuccin','onedark','shotmate'].includes(t)?t:'ayu';}catch{document.documentElement.dataset.theme='ayu'}",
                     }}
                 />
                 {children}

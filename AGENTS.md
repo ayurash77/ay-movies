@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Контекст для Codex/Claude при работе с MovieNest. Отвечай пользователю по-русски, коротко и по делу.
+Контекст для Codex/Claude при работе с AY Movies. Отвечай пользователю по-русски, коротко и по делу.
 
 ## Рабочий процесс
 
@@ -24,7 +24,7 @@ pnpm db:seed         # очистить и пересоздать demo data
 pnpm db:studio       # Prisma Studio
 ```
 
-Демо-пароль после seed: `demo123`. Demo users включают `demo@movienest.dev` и администратора `ayurash@me.com`.
+Демо-пароль после seed: `demo123`. Demo users включают `demo@ay-movies.dev` и администратора `ayurash@me.com`.
 
 ## Деплой
 

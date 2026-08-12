@@ -50,7 +50,7 @@ async function getJson<T>(url: string): Promise<T | null> {
     try {
         const res = await fetch(url, {
             signal: AbortSignal.timeout(7000),
-            headers: { 'user-agent': 'MovieNest/1.0 (movie metadata lookup)' },
+            headers: { 'user-agent': 'AY Movies/1.0 (movie metadata lookup)' },
         });
         if (!res.ok) return null;
         return (await res.json()) as T;

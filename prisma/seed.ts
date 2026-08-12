@@ -79,13 +79,13 @@ const MOVIES = [
 ] as const;
 
 const USERS = [
-    { email: 'demo@movienest.dev', name: 'Демо' },
+    { email: 'demo@ay-movies.dev', name: 'Демо' },
     { email: 'ayurash@me.com', name: 'Ayurash', role: 'ADMIN' },
-    { email: 'anna@movienest.dev', name: 'Анна' },
-    { email: 'boris@movienest.dev', name: 'Борис' },
-    { email: 'vera@movienest.dev', name: 'Вера' },
-    { email: 'gleb@movienest.dev', name: 'Глеб' },
-    { email: 'dasha@movienest.dev', name: 'Даша' },
+    { email: 'anna@ay-movies.dev', name: 'Анна' },
+    { email: 'boris@ay-movies.dev', name: 'Борис' },
+    { email: 'vera@ay-movies.dev', name: 'Вера' },
+    { email: 'gleb@ay-movies.dev', name: 'Глеб' },
+    { email: 'dasha@ay-movies.dev', name: 'Даша' },
 ] as const;
 
 function daysAgo(days: number) {
@@ -104,7 +104,7 @@ function mulberry32(seed: number) {
 }
 
 async function main() {
-    console.log('Seeding MovieNest…');
+    console.log('Seeding AY Movies…');
 
     await db.userFriend.deleteMany();
     await db.rating.deleteMany();
@@ -166,7 +166,7 @@ async function main() {
     }
 
     console.log(`Done: ${users.length} users, ${movies.length} movies, ${ratingCount} ratings.`);
-    console.log('Demo login: demo@movienest.dev / demo123');
+    console.log('Demo login: demo@ay-movies.dev / demo123');
 }
 
 main()

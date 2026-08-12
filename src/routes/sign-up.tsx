@@ -40,7 +40,7 @@ function SignUpPage() {
             });
 
             if (result.ok) {
-                toast.success('Добро пожаловать в MovieNest!');
+                toast.success('Добро пожаловать в AY Movies!');
                 await router.invalidate();
                 navigate({ to: '/' });
             } else {

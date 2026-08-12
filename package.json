@@ -1,5 +1,5 @@
 {
-  "name": "ay-movienest",
+  "name": "ay-movies",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.1.1",
@@ -7,6 +7,7 @@
     "dev": "vite dev --port 3002",
     "build": "vite build",
     "preview": "vite preview",
+    "test:branding": "node --test scripts/branding.test.mjs",
     "typecheck": "tsc --noEmit",
     "dc:up": "docker compose up -d",
     "dc:down": "docker compose down",

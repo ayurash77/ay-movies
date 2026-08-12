@@ -1,6 +1,6 @@
-# MovieNest
+# AY Movies
 
-MovieNest — full-stack веб-библиотека фильмов, сериалов и мультфильмов.
+AY Movies — full-stack веб-библиотека фильмов, сериалов и мультфильмов.
 
 Возможности:
 - каталог с пагинацией, поиском, сортировкой, фильтрами и группировками;
@@ -33,9 +33,9 @@ pnpm dev
 Dev server: `http://localhost:3002`.
 
 Демо-пользователи после seed:
-- `demo@movienest.dev` / `demo123`
+- `demo@ay-movies.dev` / `demo123`
 - `ayurash@me.com` / `demo123` — admin
-- `anna@movienest.dev`, `boris@movienest.dev`, `vera@movienest.dev`, `gleb@movienest.dev`, `dasha@movienest.dev` / `demo123`
+- `anna@ay-movies.dev`, `boris@ay-movies.dev`, `vera@ay-movies.dev`, `gleb@ay-movies.dev`, `dasha@ay-movies.dev` / `demo123`
 
 ## Команды
 

@@ -25,7 +25,7 @@ export const Route = createFileRoute('/notifications')({
 });
 
 function notifySidebarChanged() {
-    window.dispatchEvent(new Event('movienest:notifications-changed'));
+    window.dispatchEvent(new Event('ay-movies:notifications-changed'));
 }
 
 function NotificationCard({ item, busy, onRead }: {

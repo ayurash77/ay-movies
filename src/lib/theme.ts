@@ -7,7 +7,7 @@ export const appThemes = [
 
 export type AppTheme = (typeof appThemes)[number]['id'];
 
-const STORAGE_KEY = 'movienest:theme';
+const STORAGE_KEY = 'ay-movies:theme';
 const DEFAULT_THEME: AppTheme = 'ayu';
 
 function themeKey(userId?: string | null) {

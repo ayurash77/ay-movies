@@ -5,7 +5,7 @@ import { db } from '@/lib/db';
 import { toServedUploadUrl } from '@/lib/upload-url';
 import { resolveRole, type UserRole } from '@/lib/user-roles';
 
-const SESSION_COOKIE = 'movienest_session';
+const SESSION_COOKIE = 'ay_movies_session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type SessionUser = {

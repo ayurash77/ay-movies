@@ -37,8 +37,8 @@ export const Route = createFileRoute('/chat')({
 });
 
 function notifyChatChanged() {
-    window.dispatchEvent(new Event('movienest:chat-changed'));
-    window.dispatchEvent(new Event('movienest:notifications-changed'));
+    window.dispatchEvent(new Event('ay-movies:chat-changed'));
+    window.dispatchEvent(new Event('ay-movies:notifications-changed'));
 }
 
 function ChatAvatar({ user, className = 'size-10' }: { user: Pick<ChatUser, 'name' | 'avatarUrl'> | null; className?: string }) {
