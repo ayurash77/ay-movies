@@ -17,7 +17,7 @@ AY Movies — full-stack веб-библиотека фильмов, сериа�
 - PostgreSQL 18 + Prisma.
 - Tailwind CSS 4, Radix/shadcn-style primitives.
 - Email/password auth: scrypt hash, DB sessions, httpOnly cookie.
-- Timeweb Cloud App Platform + S3-compatible object storage.
+- Общий Timeweb VDS + Caddy + S3-compatible object storage.
 
 ## Запуск
 
@@ -55,18 +55,29 @@ pnpm db:seed         # очистить и пересоздать demo data
 pnpm db:push         # dev-only sync без миграции, не использовать для production flow
 ```
 
-## Деплой Timeweb
+## Продакшен
 
-Проект деплоится из GitHub через root `Dockerfile`. Контейнер на старте выполняет `prisma migrate deploy`, затем поднимает приложение на `PORT`/3000.
+- Канонический адрес: `https://movies.ayurash.ru`.
+- `movienest.ru` сохранён только как постоянный redirect.
+- Общий Timeweb VDS: `/opt/ayurash`, исходники в
+  `/opt/ayurash/apps/ay-movies`, Compose service `ay-movies`, host port `3102`.
+- Caddy обслуживает HTTPS; PostgreSQL database `ay_movies` работает на том же VDS.
+- Контейнер применяет `prisma migrate deploy` при старте.
+- Постеры, аватары и фото чата хранятся в действующем Timeweb S3; route handlers
+  проксируют их через same-origin `/uploads/<subdir>/<file>`.
+- Базы и production-конфигурация ежедневно сохраняются в зашифрованный restic backup.
 
-Runtime env:
-- `DATABASE_URL` — managed PostgreSQL.
-- `SESSION_SECRET`.
-- `WEB_ALLOWED_HOSTS` — публичный/технический домены для `vite.config.ts`.
-- `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`.
-- Опционально `S3_REGION`, `S3_PUBLIC_URL`.
+Деплой выполняется через репозиторий `ayurash-infra`:
 
-Production filesystem ephemeral, поэтому пользовательские постеры, аватары и фото чата должны храниться в S3. В БД сохраняется same-origin URL вида `/uploads/<subdir>/<file>`, а route handlers проксируют S3-объекты.
+```bash
+./scripts/deploy-app-source.sh ay-movies /path/to/ay-movies
+ssh deploy@72.56.8.147 \
+  'cd /opt/ayurash && docker compose up -d --build ay-movies'
+```
+
+Runtime env хранится только на VDS в `/opt/ayurash/env/ay-movies.env` и содержит
+`DATABASE_URL`, `SESSION_SECRET`, `WEB_ALLOWED_HOSTS` и `S3_*`. Автозаполнение
+карточки использует Wikipedia/Wikidata без OpenAI и без API-токенов.
 
 ## Архитектура
 

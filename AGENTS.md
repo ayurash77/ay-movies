@@ -28,15 +28,16 @@ pnpm db:studio       # Prisma Studio
 
 ## Деплой
 
-Timeweb Cloud App Platform собирает root `Dockerfile`, стартует приложение на `PORT`/3000 и применяет `prisma migrate deploy`.
+Production: `https://movies.ayurash.ru` на общем Timeweb VDS. Исходники лежат
+в `/opt/ayurash/apps/ay-movies`, Compose service — `ay-movies`, host port `3102`
+за Caddy. PostgreSQL database `ay_movies` работает в service `postgres` того же
+Compose project; при старте контейнера выполняется `prisma migrate deploy`.
+Загрузки остаются в Timeweb S3, базы и конфигурация ежедневно сохраняются в
+зашифрованный restic backup. `movienest.ru` — только legacy redirect.
 
-Runtime env в панели:
-- `DATABASE_URL` для managed PostgreSQL.
-- `SESSION_SECRET`.
-- `WEB_ALLOWED_HOSTS` для `preview.allowedHosts` в `vite.config.ts`; если задан, включай публичный и технический домены.
-- `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, опционально `S3_REGION`, `S3_PUBLIC_URL`.
-
-Container FS ephemeral. Загруженные постеры, аватары и фото чата в production должны идти в S3.
+Runtime env: `/opt/ayurash/env/ay-movies.env`. Нужны `DATABASE_URL`,
+`SESSION_SECRET`, `WEB_ALLOWED_HOSTS` и `S3_*`. OpenAI не используется:
+`movie-lookup.ts` получает данные из Wikipedia/Wikidata без токенов.
 
 ## Архитектура
 
