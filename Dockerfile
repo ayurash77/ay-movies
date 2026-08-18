@@ -20,4 +20,4 @@ ENV PORT=3000
 EXPOSE 3000
 
 # Apply pending migrations, then serve the built app
-CMD ["sh", "-c", "pnpm exec prisma migrate deploy && pnpm preview --port ${PORT:-3000} --host 0.0.0.0"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && pnpm exec tsx scripts/merge-duplicate-movies.ts --apply && pnpm preview --port ${PORT:-3000} --host 0.0.0.0"]

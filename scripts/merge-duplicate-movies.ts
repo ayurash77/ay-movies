@@ -122,6 +122,39 @@ async function mergeWatchEntries(tx: Tx, canonicalId: string, duplicateId: strin
     }
 }
 
+async function countStaleMovieNotificationHrefs() {
+    const notifications = await db.notification.findMany({
+        where: { movieId: { not: null }, href: { not: null } },
+        select: { movieId: true, href: true },
+    });
+
+    return notifications.filter((notification) =>
+        notification.movieId && notification.href !== `/movies/${notification.movieId}`,
+    ).length;
+}
+
+async function repairMovieNotificationHrefs() {
+    const notifications = await db.notification.findMany({
+        where: { movieId: { not: null }, href: { not: null } },
+        select: { id: true, movieId: true, href: true },
+    });
+    let repaired = 0;
+
+    for (const notification of notifications) {
+        if (!notification.movieId) continue;
+        const href = `/movies/${notification.movieId}`;
+        if (notification.href === href) continue;
+
+        await db.notification.update({
+            where: { id: notification.id },
+            data: { href },
+        });
+        repaired += 1;
+    }
+
+    return repaired;
+}
+
 async function mergeDuplicateGroup(key: string, movies: MovieForMerge[]) {
     const mergeableMovies = movies.map(toMergeableMovie);
     const canonical = chooseCanonicalMovie(mergeableMovies);
@@ -144,10 +177,15 @@ async function mergeDuplicateGroup(key: string, movies: MovieForMerge[]) {
             where: { movieId: { in: duplicateIds } },
             data: { movieId: canonical.id },
         });
-        await tx.notification.updateMany({
-            where: { movieId: { in: duplicateIds } },
-            data: { movieId: canonical.id },
-        });
+        for (const duplicateId of duplicateIds) {
+            await tx.notification.updateMany({
+                where: { movieId: duplicateId },
+                data: {
+                    movieId: canonical.id,
+                    href: `/movies/${canonical.id}`,
+                },
+            });
+        }
         await tx.movie.deleteMany({ where: { id: { in: duplicateIds } } });
         await tx.movie.update({
             where: { id: canonical.id },
@@ -187,8 +225,10 @@ async function main() {
     }
 
     const duplicateGroups = [ ...groups.entries() ].filter(([, group]) => group.length > 1);
+    const staleNotificationHrefs = await countStaleMovieNotificationHrefs();
     console.log(`movies: ${movies.length}`);
     console.log(`duplicate groups: ${duplicateGroups.length}`);
+    console.log(`stale movie notification hrefs: ${staleNotificationHrefs}`);
 
     if (!apply) {
         for (const [ key, group ] of duplicateGroups) {
@@ -213,8 +253,10 @@ async function main() {
         }
     }
 
+    const repairedNotificationHrefs = await repairMovieNotificationHrefs();
     console.log(`merged duplicate records: ${mergedDuplicates}`);
     console.log(`backfilled movies: ${backfilledMovies}`);
+    console.log(`repaired movie notification hrefs: ${repairedNotificationHrefs}`);
 }
 
 main()

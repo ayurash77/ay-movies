@@ -7,6 +7,7 @@
     "dev": "vite dev --port 3002",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "pnpm test:branding && pnpm test:dedupe && pnpm test:genres && pnpm test:merge",
     "test:branding": "node --test scripts/branding.test.mjs",
     "test:dedupe": "tsx --test scripts/movie-dedupe.test.ts",
     "test:genres": "tsx --test scripts/genre-groups.test.ts",
