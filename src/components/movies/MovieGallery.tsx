@@ -67,19 +67,35 @@ function GenreCards({
 }) {
     return (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {groups.map(([ genre, genreMovies ]) => (
-                <button
-                    key={genre}
-                    type="button"
-                    onClick={() => onSelect(genre)}
-                    className="flex min-h-28 flex-col items-start justify-between rounded-lg border border-card-border bg-card p-4 text-left shadow-[0_14px_34px_rgb(0_0_0/0.20)] transition-all hover:-translate-y-0.5 hover:border-card-border-active hover:bg-card-active hover:shadow-[0_20px_46px_rgb(0_0_0/0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                >
-                    <span className="text-lg font-semibold">{genre}</span>
-                    <span className="text-sm text-muted-foreground">
-                        {genreMovies.length} {genreMovies.length === 1 ? 'позиция' : 'позиций'}
-                    </span>
-                </button>
-            ))}
+            {groups.map(([ genre, genreMovies ]) => {
+                const imageUrl = genreMovies.find((movie) => movie.posterUrl)?.posterUrl;
+                return (
+                    <button
+                        key={genre}
+                        type="button"
+                        onClick={() => onSelect(genre)}
+                        className="group relative flex min-h-36 overflow-hidden rounded-lg border border-card-border bg-card text-left shadow-[0_14px_34px_rgb(0_0_0/0.20)] transition-all hover:-translate-y-0.5 hover:border-card-border-active hover:shadow-[0_20px_46px_rgb(0_0_0/0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    >
+                        {imageUrl ? (
+                            <img
+                                src={imageUrl}
+                                alt=""
+                                loading="lazy"
+                                className="absolute inset-0 size-full object-cover opacity-75 transition-transform duration-300 group-hover:scale-105"
+                            />
+                        ) : (
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--primary)/0.45),transparent_42%),linear-gradient(135deg,hsl(var(--card)),hsl(var(--accent)))]"/>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/55 to-background/10"/>
+                        <div className="relative z-10 flex min-h-36 flex-1 flex-col justify-end gap-1 p-4">
+                            <span className="text-xl font-semibold text-foreground drop-shadow">{genre}</span>
+                            <span className="text-sm text-foreground/80">
+                                {genreMovies.length} {genreMovies.length === 1 ? 'позиция' : 'позиций'}
+                            </span>
+                        </div>
+                    </button>
+                );
+            })}
         </div>
     );
 }

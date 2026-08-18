@@ -1,24 +1,38 @@
-const GENRE_ALIASES: Record<string, string[]> = {
-    'Драма': [ 'драма', 'драмы', 'драматический', 'драматический фильм', 'drama' ],
-    'Комедия': [ 'комедия', 'комедийный', 'comedy' ],
-    'Триллер': [ 'триллер', 'thriller' ],
-    'Боевик': [ 'боевик', 'экшен', 'action' ],
-    'Детектив': [ 'детектив', 'детективный', 'mystery' ],
-    'Фантастика': [ 'фантастика', 'научная фантастика', 'sci fi', 'sci-fi', 'киберпанк', 'cyberpunk' ],
-    'Фэнтези': [ 'фэнтези', 'фентези', 'fantasy' ],
-    'Ужасы': [ 'ужасы', 'хоррор', 'horror' ],
-    'Мелодрама': [ 'мелодрама', 'романтика', 'romance' ],
-    'Приключения': [ 'приключения', 'приключенческий', 'adventure' ],
-    'Криминал': [ 'криминал', 'криминальный', 'crime' ],
-    'Военный': [ 'военный', 'военное', 'war' ],
-    'Исторический': [ 'исторический', 'история', 'history' ],
-    'Семейный': [ 'семейный', 'family' ],
-    'Анимация': [ 'анимация', 'мультфильм', 'мультфильмы', 'animation' ],
-    'Музыкальный': [ 'музыкальный', 'мюзикл', 'music', 'musical' ],
-    'Спорт': [ 'спорт', 'спортивный', 'sport' ],
-    'Документальный': [ 'документальный', 'documentary' ],
-    'Биография': [ 'биография', 'биографический', 'biography' ],
+type GenreRule = {
+    genre: string;
+    patterns: Array<string | RegExp>;
 };
+
+export const STANDARD_GENRES = [
+    'Анимация',
+    'Боевик',
+    'Детектив',
+    'Драма',
+    'Комедия',
+    'Криминал',
+    'Мелодрама',
+    'Приключения',
+    'Триллер',
+    'Ужасы',
+    'Фантастика',
+    'Фэнтези',
+    'Другое',
+] as const;
+
+const GENRE_RULES: GenreRule[] = [
+    { genre: 'Анимация', patterns: [ 'анимац', 'мульт', 'animation' ] },
+    { genre: 'Фантастика', patterns: [ 'фантаст', 'киберпанк', 'кинофантастика', 'sci fi', 'sci-fi', 'science fiction', 'cyberpunk' ] },
+    { genre: 'Фэнтези', patterns: [ 'фэнтези', 'фентези', 'fantasy' ] },
+    { genre: 'Ужасы', patterns: [ 'ужас', 'хоррор', 'horror' ] },
+    { genre: 'Триллер', patterns: [ 'триллер', 'thriller', 'саспенс' ] },
+    { genre: 'Детектив', patterns: [ 'детектив', 'тайна', 'загадк', 'mystery', 'расслед' ] },
+    { genre: 'Криминал', patterns: [ 'криминал', 'crime', 'ограблен', 'нуар', 'gangster' ] },
+    { genre: 'Боевик', patterns: [ 'боевик', 'экшн', 'action' ] },
+    { genre: 'Комедия', patterns: [ 'комед', 'comedy', 'сатира', 'трагикомед' ] },
+    { genre: 'Мелодрама', patterns: [ 'мелодрам', 'романтическ', 'романтика', 'romance' ] },
+    { genre: 'Приключения', patterns: [ 'приключ', 'adventure', 'вестерн', 'путешеств' ] },
+    { genre: 'Драма', patterns: [ 'драма', 'драмы', 'драмат', 'биограф', 'истор', 'военн', 'спорт', 'взрослен', 'семейн', 'drama', 'biography', 'history', 'war', 'sport', 'family' ] },
+];
 
 function normalizeGenreKey(value: string) {
     return value
@@ -30,16 +44,18 @@ function normalizeGenreKey(value: string) {
         .trim();
 }
 
-const GENRE_ALIAS_MAP = new Map(
-    Object.entries(GENRE_ALIASES).flatMap(([ genre, aliases ]) =>
-        aliases.map((alias) => [ normalizeGenreKey(alias), genre ]),
-    ),
-);
-
 export function normalizeGenre(value: string) {
     const trimmed = value.trim();
     if (!trimmed) return '';
-    return GENRE_ALIAS_MAP.get(normalizeGenreKey(trimmed)) ?? trimmed;
+    const key = normalizeGenreKey(trimmed);
+    const rule = GENRE_RULES.find(({ patterns }) =>
+        patterns.some((pattern) =>
+            typeof pattern === 'string'
+                ? key.includes(normalizeGenreKey(pattern))
+                : pattern.test(key),
+        ),
+    );
+    return rule?.genre ?? 'Другое';
 }
 
 export function movieGenreGroups(genres: string[]) {
