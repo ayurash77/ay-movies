@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent } from 'react';
 import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router';
-import { Check, Loader2, Paperclip, Pencil, Reply, Send, Trash2, X } from 'lucide-react';
+import { Check, Copy, Loader2, MessageCirclePlus, Paperclip, Pencil, Reply, Search, Send, Trash2, UsersRound, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -20,6 +20,12 @@ import {
 } from '@/server/chat';
 
 const CHAT_IMAGE_MIME_TYPES = [ 'image/jpeg', 'image/png', 'image/webp' ];
+
+type MessageMenuState = {
+    message: ChatMessageData;
+    x: number;
+    y: number;
+} | null;
 
 export const Route = createFileRoute('/chat')({
     validateSearch: z.object({
@@ -53,7 +59,8 @@ function ChatAvatar({ user, className = 'size-10' }: { user: Pick<ChatUser, 'nam
 }
 
 function ThreadButton({ thread, active }: { thread: ChatThreadSummary; active: boolean }) {
-    const title = thread.friend?.name ?? 'Диалог';
+    const isGlobal = thread.kind === 'GLOBAL';
+    const title = thread.title;
     return (
         <Link
             to="/chat"
@@ -63,7 +70,13 @@ function ThreadButton({ thread, active }: { thread: ChatThreadSummary; active: b
                 active && 'bg-card-active',
             )}
         >
-            <ChatAvatar user={thread.friend}/>
+            {isGlobal ? (
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
+                    <UsersRound className="size-5"/>
+                </span>
+            ) : (
+                <ChatAvatar user={thread.friend}/>
+            )}
             <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
                     <span className="truncate text-sm font-semibold">{title}</span>
@@ -76,7 +89,7 @@ function ThreadButton({ thread, active }: { thread: ChatThreadSummary; active: b
                 <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                     {thread.lastMessage
                         ? `${thread.lastMessage.isMine ? 'Вы: ' : ''}${thread.lastMessage.text}`
-                        : 'Пока нет сообщений'}
+                        : isGlobal ? 'Общий чат для всех пользователей' : 'Пока нет сообщений'}
                 </span>
             </span>
         </Link>
@@ -140,6 +153,7 @@ function MessageBubble({
     message,
     busy,
     onMediaLoad,
+    onContextMenu,
     onReply,
     onEdit,
     onDelete,
@@ -147,6 +161,7 @@ function MessageBubble({
     message: ChatMessageData;
     busy: boolean;
     onMediaLoad: () => void;
+    onContextMenu: (event: MouseEvent<HTMLDivElement>, message: ChatMessageData) => void;
     onReply: (message: ChatMessageData) => void;
     onEdit: (message: ChatMessageData) => void;
     onDelete: (message: ChatMessageData) => void;
@@ -158,8 +173,9 @@ function MessageBubble({
             ) : null}
             {!message.isMine ? <ChatAvatar user={message.author} className="size-7"/> : null}
             <div
+                onContextMenu={(event) => onContextMenu(event, message)}
                 className={cn(
-                    'max-w-[82%] rounded-2xl px-3 py-2 shadow-[0_8px_22px_rgb(0_0_0/0.16)]',
+                    'max-w-[82%] cursor-context-menu rounded-2xl px-3 py-2 shadow-[0_8px_22px_rgb(0_0_0/0.16)]',
                     message.isMine
                         ? 'rounded-br-none bg-primary/75 text-primary-foreground'
                         : 'rounded-bl-none bg-chat-bubble text-card-foreground',
@@ -210,8 +226,99 @@ function MessageBubble({
     );
 }
 
+function MessageContextMenu({
+    state,
+    busy,
+    onClose,
+    onReply,
+    onCopy,
+    onEdit,
+    onDelete,
+}: {
+    state: MessageMenuState;
+    busy: boolean;
+    onClose: () => void;
+    onReply: (message: ChatMessageData) => void;
+    onCopy: (message: ChatMessageData) => void;
+    onEdit: (message: ChatMessageData) => void;
+    onDelete: (message: ChatMessageData) => void;
+}) {
+    if (!state) return null;
+
+    const menuWidth = 188;
+    const menuHeight = state.message.canManage ? 176 : 96;
+    const left = typeof window === 'undefined'
+        ? state.x
+        : Math.max(8, Math.min(state.x, window.innerWidth - menuWidth - 8));
+    const top = typeof window === 'undefined'
+        ? state.y
+        : Math.max(8, Math.min(state.y, window.innerHeight - menuHeight - 8));
+
+    const run = (action: (message: ChatMessageData) => void) => {
+        const message = state.message;
+        onClose();
+        action(message);
+    };
+
+    return (
+        <div
+            className="fixed z-50 w-[188px] rounded-lg border border-border bg-popover/95 p-1 text-sm text-popover-foreground shadow-2xl backdrop-blur-xl"
+            style={{ left, top }}
+            role="menu"
+            onPointerDown={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+        >
+            <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent"
+                onClick={() => run(onReply)}
+                role="menuitem"
+            >
+                <Reply className="size-4"/>
+                Ответить
+            </button>
+            {state.message.text ? (
+                <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent"
+                    onClick={() => run(onCopy)}
+                    role="menuitem"
+                >
+                    <Copy className="size-4"/>
+                    Копировать
+                </button>
+            ) : null}
+            {state.message.canManage ? (
+                <>
+                    <button
+                        type="button"
+                        disabled={busy}
+                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                        onClick={() => run(onEdit)}
+                        role="menuitem"
+                    >
+                        <Pencil className="size-4"/>
+                        Редактировать
+                    </button>
+                    <button
+                        type="button"
+                        disabled={busy}
+                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-destructive transition-colors hover:bg-destructive/15 disabled:pointer-events-none disabled:opacity-50"
+                        onClick={() => run(onDelete)}
+                        role="menuitem"
+                    >
+                        <Trash2 className="size-4"/>
+                        Удалить
+                    </button>
+                </>
+            ) : null}
+        </div>
+    );
+}
+
 function ChatPage() {
     const data = Route.useLoaderData();
+    const search = Route.useSearch();
     const router = useRouter();
     const [ text, setText ] = useState('');
     const [ replyTo, setReplyTo ] = useState<ChatMessageData | null>(null);
@@ -220,12 +327,26 @@ function ChatPage() {
     const [ imagePreviewUrl, setImagePreviewUrl ] = useState<string | null>(null);
     const [ isSending, setIsSending ] = useState(false);
     const [ busyMessageId, setBusyMessageId ] = useState<string | null>(null);
+    const [ dialogSearch, setDialogSearch ] = useState('');
+    const [ messageMenu, setMessageMenu ] = useState<MessageMenuState>(null);
     const messagesRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
     const fileRef = useRef<HTMLInputElement | null>(null);
     const imagePreviewRef = useRef<string | null>(null);
     const activeThreadId = data.ok ? data.activeThread?.id ?? null : null;
+    const hasExplicitThread = Boolean(search.thread || search.user);
     const hasComposerPreview = Boolean(replyTo || editingMessage || imagePreviewUrl);
+    const startUsers = data.startUsers;
+    const directThreads = data.threads.filter((thread) => thread.kind !== 'GLOBAL');
+    const globalThread = data.threads.find((thread) => thread.kind === 'GLOBAL') ?? null;
+    const filteredStartUsers = useMemo(() => {
+        const query = dialogSearch.trim().toLowerCase();
+        if (!query) return startUsers;
+        return startUsers.filter((user) => (
+            user.name.toLowerCase().includes(query) ||
+            user.email.toLowerCase().includes(query)
+        ));
+    }, [ dialogSearch, startUsers ]);
 
     const clearImageDraft = useCallback(() => {
         if (imagePreviewRef.current) {
@@ -270,7 +391,26 @@ function ChatPage() {
 
     useEffect(() => () => clearImageDraft(), [ clearImageDraft ]);
 
+    useEffect(() => {
+        if (!messageMenu) return;
+
+        const handlePointerDown = () => setMessageMenu(null);
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setMessageMenu(null);
+        };
+
+        window.addEventListener('pointerdown', handlePointerDown);
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('resize', handlePointerDown);
+        return () => {
+            window.removeEventListener('pointerdown', handlePointerDown);
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('resize', handlePointerDown);
+        };
+    }, [ messageMenu ]);
+
     const handleReply = (message: ChatMessageData) => {
+        setMessageMenu(null);
         if (editingMessage) setText('');
         setEditingMessage(null);
         setReplyTo(message);
@@ -278,6 +418,7 @@ function ChatPage() {
     };
 
     const handleEdit = (message: ChatMessageData) => {
+        setMessageMenu(null);
         setReplyTo(null);
         clearImageDraft();
         setEditingMessage(message);
@@ -292,6 +433,7 @@ function ChatPage() {
 
     const handleDelete = async (message: ChatMessageData) => {
         if (busyMessageId) return;
+        setMessageMenu(null);
         if (!window.confirm('Удалить сообщение?')) return;
 
         setBusyMessageId(message.id);
@@ -309,6 +451,21 @@ function ChatPage() {
             toast.error('Не удалось удалить сообщение');
         } finally {
             setBusyMessageId(null);
+        }
+    };
+
+    const handleMessageContextMenu = (event: MouseEvent<HTMLDivElement>, message: ChatMessageData) => {
+        event.preventDefault();
+        setMessageMenu({ message, x: event.clientX, y: event.clientY });
+    };
+
+    const handleCopyMessage = async (message: ChatMessageData) => {
+        if (!message.text) return;
+        try {
+            await navigator.clipboard.writeText(message.text);
+            toast.success('Скопировано');
+        } catch {
+            toast.error('Не удалось скопировать сообщение');
         }
     };
 
@@ -404,23 +561,67 @@ function ChatPage() {
         }
     };
 
-    const threads = data.threads;
     const messages = data.ok ? data.messages : [];
     const activeThread = data.ok ? data.activeThread : null;
-    const title = activeThread?.friend?.name ?? 'Чат';
+    const title = activeThread?.title ?? activeThread?.friend?.name ?? 'Чат';
 
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col">
-            <PageTitle title={title} mobileBackTo={activeThread ? '/chat' : undefined}/>
+            <PageTitle title={hasExplicitThread ? title : 'Чат'} mobileBackTo={activeThread && hasExplicitThread ? '/chat' : undefined}/>
 
             <div className="grid h-full min-h-0 flex-1 gap-4 overflow-hidden md:grid-cols-[18rem_minmax(0,1fr)]">
-                <aside className={cn('min-h-0 overflow-y-auto pr-1', activeThread && 'hidden md:block')}>
+                <aside className={cn('min-h-0 overflow-y-auto pr-1', activeThread && hasExplicitThread && 'hidden md:block')}>
+                    {globalThread ? (
+                        <div className="mb-3">
+                            <ThreadButton thread={globalThread} active={globalThread.id === activeThread?.id}/>
+                        </div>
+                    ) : null}
+
+                    <div className="mb-4 rounded-lg border border-border/70 bg-card/55 p-2 shadow-[0_10px_26px_rgb(0_0_0/0.16)]">
+                        <div className="mb-2 flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            <MessageCirclePlus className="size-3.5"/>
+                            Новый диалог
+                        </div>
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"/>
+                            <Input
+                                type="search"
+                                value={dialogSearch}
+                                onChange={(event) => setDialogSearch(event.target.value)}
+                                placeholder="Найти друга"
+                                className="h-9 pl-8"
+                            />
+                        </div>
+                        <div className="mt-2 flex max-h-52 flex-col gap-1 overflow-y-auto pr-1">
+                            {filteredStartUsers.length ? (
+                                filteredStartUsers.map((user) => (
+                                    <Link
+                                        key={user.id}
+                                        to="/chat"
+                                        search={{ user: user.id }}
+                                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+                                    >
+                                        <ChatAvatar user={user} className="size-7"/>
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate font-medium">{user.name}</span>
+                                            <span className="block truncate text-[11px] text-muted-foreground">{user.email}</span>
+                                        </span>
+                                    </Link>
+                                ))
+                            ) : (
+                                <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+                                    {startUsers.length ? 'Никого не найдено' : 'Сначала добавьте друзей'}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="mb-2 px-2 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         Диалоги
                     </div>
-                    {threads.length ? (
+                    {directThreads.length ? (
                         <div className="flex flex-col gap-1">
-                            {threads.map((thread) => (
+                            {directThreads.map((thread) => (
                                 <ThreadButton
                                     key={thread.id}
                                     thread={thread}
@@ -430,19 +631,31 @@ function ChatPage() {
                         </div>
                     ) : (
                         <p className="px-2 py-8 text-center text-xs text-muted-foreground">
-                            Диалогов пока нет. Откройте друга и нажмите «Написать».
+                            Личных диалогов пока нет.
                         </p>
                     )}
                 </aside>
 
-                <section className={cn('relative h-full min-h-0 overflow-hidden flex-col', activeThread ? 'flex' : 'hidden md:flex')}>
+                <section className={cn(
+                    'relative h-full min-h-0 overflow-hidden flex-col',
+                    activeThread ? 'flex' : 'hidden md:flex',
+                    activeThread && !hasExplicitThread && 'hidden md:flex',
+                )}>
                     {activeThread ? (
                         <>
                             <div className="hidden items-center gap-3 border-b border-border/70 bg-background/75 px-1 pb-3 backdrop-blur-md md:flex">
-                                <ChatAvatar user={activeThread.friend} className="size-9"/>
+                                {activeThread.kind === 'GLOBAL' ? (
+                                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
+                                        <UsersRound className="size-4"/>
+                                    </span>
+                                ) : (
+                                    <ChatAvatar user={activeThread.friend} className="size-9"/>
+                                )}
                                 <div className="min-w-0">
-                                    <div className="truncate text-sm font-semibold">{activeThread.friend?.name ?? 'Диалог'}</div>
-                                    <div className="truncate text-xs text-muted-foreground">{activeThread.friend?.email}</div>
+                                    <div className="truncate text-sm font-semibold">{activeThread.title}</div>
+                                    <div className="truncate text-xs text-muted-foreground">
+                                        {activeThread.kind === 'GLOBAL' ? 'Общий чат для всех пользователей' : activeThread.friend?.email}
+                                    </div>
                                 </div>
                             </div>
                             <div
@@ -460,6 +673,7 @@ function ChatPage() {
                                                 message={message}
                                                 busy={busyMessageId === message.id}
                                                 onMediaLoad={scrollMessagesToBottom}
+                                                onContextMenu={handleMessageContextMenu}
                                                 onReply={handleReply}
                                                 onEdit={handleEdit}
                                                 onDelete={handleDelete}
@@ -472,6 +686,15 @@ function ChatPage() {
                                     </p>
                                 )}
                             </div>
+                            <MessageContextMenu
+                                state={messageMenu}
+                                busy={messageMenu ? busyMessageId === messageMenu.message.id : false}
+                                onClose={() => setMessageMenu(null)}
+                                onReply={handleReply}
+                                onCopy={handleCopyMessage}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                            />
                             <div className="absolute inset-x-0 bottom-0 z-10 px-0 pb-3 pt-8 md:px-4 md:pb-4">
                                 {editingMessage ? (
                                     <div className="mb-2 flex items-center gap-2 rounded-xl bg-card px-3 py-2 text-xs shadow-[0_8px_22px_rgb(0_0_0/0.14)]">

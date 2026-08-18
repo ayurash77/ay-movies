@@ -26,9 +26,11 @@
 ## Chat route
 
 - `/chat` показывает список диалогов и активный thread.
+- Общий чат всегда первым в списке; блок "Новый диалог" открывает direct thread через `/chat?user=<id>`.
 - На desktop composer должен быть закреплен снизу chat section, скроллится только messages container.
-- На mobile при открытом диалоге список диалогов скрыт, back button ведет на `/chat`.
+- На mobile `/chat` без query показывает список; при открытом явном thread/user список скрыт, back button ведет на `/chat`.
 - Composer поддерживает text, image, reply, edit mode; attachment disabled while editing.
+- Сообщения открывают context menu по right click: ответить, копировать, редактировать, удалить; quick action buttons остаются fallback.
 - Автоскролл при открытии/отправке/загрузке фото должен идти через `messagesRef.current.scrollTo({ top: scrollHeight })`, с повтором после layout. Не возвращай marker `scrollIntoView`.
 - Не добавляй autofocus при открытии sidebar/sheet.
 

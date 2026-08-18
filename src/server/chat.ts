@@ -10,6 +10,10 @@ type AuthUser = {
     id: string;
     role: string;
 };
+type ChatThreadKind = 'DIRECT' | 'GLOBAL';
+
+const GLOBAL_THREAD_KEY = '__global__';
+const GLOBAL_CHAT_TITLE = 'Общий чат';
 
 export type ChatUser = {
     id: string;
@@ -38,6 +42,8 @@ export type ChatMessageData = {
 
 export type ChatThreadSummary = {
     id: string;
+    kind: ChatThreadKind;
+    title: string;
     friend: ChatUser | null;
     updatedAt: string;
     unreadCount: number;
@@ -54,12 +60,14 @@ export type ChatPageData = {
     threads: ChatThreadSummary[];
     activeThread: ChatThreadSummary | null;
     messages: ChatMessageData[];
+    startUsers: ChatUser[];
 } | {
     ok: false;
     error: string;
     threads: ChatThreadSummary[];
     activeThread: null;
     messages: [];
+    startUsers: ChatUser[];
 };
 
 const chatPageSchema = z.object({
@@ -119,6 +127,46 @@ async function canChatWith(db: Db, userId: string, friendId: string) {
     return Boolean(friendship);
 }
 
+async function ensureChatParticipant(db: Db, threadId: string, userId: string) {
+    await db.chatParticipant.upsert({
+        where: { threadId_userId: { threadId, userId } },
+        update: {},
+        create: { threadId, userId },
+    });
+}
+
+async function getOrCreateGlobalThread(db: Db, userId: string) {
+    const existing = await db.chatThread.findUnique({
+        where: { privateKey: GLOBAL_THREAD_KEY },
+        select: { id: true },
+    });
+    if (existing) {
+        await ensureChatParticipant(db, existing.id, userId);
+        return existing.id;
+    }
+
+    try {
+        const thread = await db.chatThread.create({
+            data: {
+                privateKey: GLOBAL_THREAD_KEY,
+                kind: 'GLOBAL',
+                title: GLOBAL_CHAT_TITLE,
+                participants: { create: { userId } },
+            },
+            select: { id: true },
+        });
+        return thread.id;
+    } catch {
+        const thread = await db.chatThread.findUnique({
+            where: { privateKey: GLOBAL_THREAD_KEY },
+            select: { id: true },
+        });
+        if (!thread) throw new Error('Не удалось открыть общий чат');
+        await ensureChatParticipant(db, thread.id, userId);
+        return thread.id;
+    }
+}
+
 async function getOrCreateDirectThread(db: Db, userId: string, friendId: string) {
     if (!await canChatWith(db, userId, friendId)) {
         return { ok: false as const, error: 'Чат доступен только с друзьями' };
@@ -163,6 +211,22 @@ async function assertParticipant(db: Db, threadId: string, userId: string) {
     return Boolean(participant);
 }
 
+async function getAccessibleThread(db: Db, threadId: string, userId: string) {
+    const thread = await db.chatThread.findUnique({
+        where: { id: threadId },
+        select: { id: true, kind: true },
+    });
+    if (!thread) return null;
+
+    if (thread.kind === 'GLOBAL') {
+        await ensureChatParticipant(db, thread.id, userId);
+        return { id: thread.id, kind: 'GLOBAL' as const };
+    }
+
+    if (!await assertParticipant(db, thread.id, userId)) return null;
+    return { id: thread.id, kind: 'DIRECT' as const };
+}
+
 async function getManageableMessage(db: Db, messageId: string, user: AuthUser) {
     const message = await db.chatMessage.findUnique({
         where: { id: messageId },
@@ -195,6 +259,30 @@ async function unreadCounts(db: Db, userId: string) {
     return new Map(rows.map((row) => [ row.threadId, Number(row.count) ]));
 }
 
+async function getChatStartUsers(db: Db, userId: string): Promise<ChatUser[]> {
+    const friendships = await db.userFriend.findMany({
+        where: {
+            OR: [
+                { userId },
+                { friendId: userId },
+            ],
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+            user: { select: { id: true, name: true, email: true, avatarUrl: true } },
+            friend: { select: { id: true, name: true, email: true, avatarUrl: true } },
+        },
+    });
+
+    const users = new Map<string, ChatUser>();
+    for (const friendship of friendships) {
+        const friend = friendship.userId === userId ? friendship.friend : friendship.user;
+        if (friend.id !== userId) users.set(friend.id, mapChatUser(friend));
+    }
+
+    return [ ...users.values() ].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+}
+
 async function mapThreads(db: Db, userId: string): Promise<ChatThreadSummary[]> {
     const [ threads, counts ] = await Promise.all([
         db.chatThread.findMany({
@@ -219,10 +307,15 @@ async function mapThreads(db: Db, userId: string): Promise<ChatThreadSummary[]> 
     ]);
 
     return threads.map((thread) => {
+        const kind: ChatThreadKind = thread.kind === 'GLOBAL' ? 'GLOBAL' : 'DIRECT';
         const friend = thread.participants.find((item) => item.userId !== userId)?.user ?? null;
         const latest = thread.messages[0] ?? null;
         return {
             id: thread.id,
+            kind,
+            title: kind === 'GLOBAL'
+                ? thread.title ?? GLOBAL_CHAT_TITLE
+                : friend?.name ?? 'Диалог',
             friend: friend ? mapChatUser(friend) : null,
             updatedAt: thread.updatedAt.toISOString(),
             unreadCount: counts.get(thread.id) ?? 0,
@@ -235,6 +328,10 @@ async function mapThreads(db: Db, userId: string): Promise<ChatThreadSummary[]> 
                 }
                 : null,
         };
+    }).sort((a, b) => {
+        if (a.kind === 'GLOBAL' && b.kind !== 'GLOBAL') return -1;
+        if (a.kind !== 'GLOBAL' && b.kind === 'GLOBAL') return 1;
+        return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
     });
 }
 
@@ -295,6 +392,7 @@ export const getUnreadChatCount = createServerFn({ method: 'GET' }).handler(asyn
     const { getAuthUser } = await import('./session');
     const user = await getAuthUser();
     if (!user) return 0;
+    await getOrCreateGlobalThread(db, user.id);
     const rows = await db.$queryRawUnsafe<Array<{ count: bigint }>>(
         `
             SELECT COUNT(m."id") AS count
@@ -316,41 +414,55 @@ export const getChatPageData = createServerFn({ method: 'GET' })
         const { getAuthUser } = await import('./session');
         const user = await getAuthUser();
         if (!user) {
-            return { ok: false, error: 'Нужен вход', threads: [], activeThread: null, messages: [] };
+            return { ok: false, error: 'Нужен вход', threads: [], activeThread: null, messages: [], startUsers: [] };
         }
 
+        const globalThreadId = await getOrCreateGlobalThread(db, user.id);
+        const startUsersPromise = getChatStartUsers(db, user.id);
         let activeThreadId = data.threadId ?? null;
         if (!activeThreadId && data.userId) {
             const direct = await getOrCreateDirectThread(db, user.id, data.userId);
+            const [ threads, startUsers ] = await Promise.all([
+                mapThreads(db, user.id),
+                startUsersPromise,
+            ]);
             if (!direct.ok) {
                 return {
                     ok: false,
                     error: direct.error,
-                    threads: await mapThreads(db, user.id),
+                    threads,
                     activeThread: null,
                     messages: [],
+                    startUsers,
                 };
             }
             activeThreadId = direct.threadId;
         }
+        if (!activeThreadId) activeThreadId = globalThreadId;
 
         if (activeThreadId) {
-            const isParticipant = await assertParticipant(db, activeThreadId, user.id);
-            if (!isParticipant) {
+            const thread = await getAccessibleThread(db, activeThreadId, user.id);
+            if (!thread) {
+                const [ threads, startUsers ] = await Promise.all([
+                    mapThreads(db, user.id),
+                    startUsersPromise,
+                ]);
                 return {
                     ok: false,
                     error: 'Диалог не найден',
-                    threads: await mapThreads(db, user.id),
+                    threads,
                     activeThread: null,
                     messages: [],
+                    startUsers,
                 };
             }
             await markRead(db, activeThreadId, user.id);
         }
 
-        const [ threads, messages ] = await Promise.all([
+        const [ threads, messages, startUsers ] = await Promise.all([
             mapThreads(db, user.id),
             activeThreadId ? getMessages(db, activeThreadId, user) : Promise.resolve([]),
+            startUsersPromise,
         ]);
 
         return {
@@ -360,6 +472,7 @@ export const getChatPageData = createServerFn({ method: 'GET' })
                 ? threads.find((thread) => thread.id === activeThreadId) ?? null
                 : null,
             messages,
+            startUsers,
         };
     });
 
@@ -420,7 +533,7 @@ export const sendChatMessage = createServerFn({ method: 'POST' })
         }
         if (!threadId) return { ok: false as const, error: 'Диалог не выбран' };
 
-        if (!await assertParticipant(db, threadId, user.id)) {
+        if (!await getAccessibleThread(db, threadId, user.id)) {
             return { ok: false as const, error: 'Диалог не найден' };
         }
 
@@ -461,7 +574,7 @@ export const sendChatMessage = createServerFn({ method: 'POST' })
             .filter((id) => id !== user.id);
         const notificationBody = message.text || 'Фото';
 
-        if (recipients.length) {
+        if (thread.kind !== 'GLOBAL' && recipients.length) {
             try {
                 const { createUserMessageNotification } = await import('./notifications');
                 await Promise.all(recipients.map((recipientId) => createUserMessageNotification({
@@ -525,7 +638,7 @@ export const markChatThreadRead = createServerFn({ method: 'POST' })
         const { getAuthUser } = await import('./session');
         const user = await getAuthUser();
         if (!user) return { ok: false as const, error: 'Нужен вход' };
-        if (!await assertParticipant(db, data.threadId, user.id)) {
+        if (!await getAccessibleThread(db, data.threadId, user.id)) {
             return { ok: false as const, error: 'Диалог не найден' };
         }
 

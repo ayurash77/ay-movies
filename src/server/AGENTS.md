@@ -19,7 +19,7 @@
 - `movie-lookup.ts` — автозаполнение без AI tokens через Wikipedia/Wikidata.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
 - `notifications.ts` — уведомления для фильмов, комментариев и chat messages.
-- `chat.ts` — direct threads только с друзьями, polling data, read counters, replies/images/edit/delete.
+- `chat.ts` — общий global thread, direct threads только с друзьями, polling data, read counters, replies/images/edit/delete.
 - `uploads.ts`, `profile.ts`, `storage.ts` — постеры, аватары, S3/local storage.
 - `sidebar.ts` — счетчики для меню.
 
@@ -27,6 +27,7 @@
 
 - `resolveRole()` из `src/lib/user-roles.ts` делает `ayurash@me.com` admin независимо от stored role.
 - Admin может управлять ролями, чужими фильмами/комментариями и видимыми chat messages.
+- Общий чат доступен всем авторизованным пользователям; персональные уведомления о chat messages создаются только для direct threads.
 - Обычный пользователь управляет только своим контентом.
 
 ## Prisma

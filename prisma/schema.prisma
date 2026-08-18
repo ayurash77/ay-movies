@@ -119,12 +119,15 @@ model Notification {
 model ChatThread {
   id           String            @id @default(cuid())
   privateKey   String?           @unique
+  kind         String            @default("DIRECT")
+  title        String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   participants ChatParticipant[]
   messages     ChatMessage[]
 
   @@index([updatedAt])
+  @@index([kind, updatedAt])
 }
 
 model ChatParticipant {
