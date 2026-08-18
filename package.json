@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:branding": "node --test scripts/branding.test.mjs",
+    "test:genres": "tsx --test scripts/genre-groups.test.ts",
     "typecheck": "tsc --noEmit",
     "dc:up": "docker compose up -d",
     "dc:down": "docker compose down",
