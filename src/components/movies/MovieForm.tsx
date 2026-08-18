@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from 'react';
 import { Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -16,6 +16,14 @@ type MovieFormProps = {
     onSubmit: (fields: MovieFormFields) => Promise<void>;
 };
 
+type FieldRowProps = {
+    htmlFor?: string;
+    label: string;
+    required?: boolean;
+    align?: 'center' | 'start';
+    children: ReactNode;
+};
+
 const KIND_LABELS: Record<NonNullable<MovieFormFields['kind']>, string> = {
     MOVIE: 'Фильм',
     SERIES: 'Сериал',
@@ -25,6 +33,22 @@ const KIND_LABELS: Record<NonNullable<MovieFormFields['kind']>, string> = {
 function defaultSelectedGenres(genres: string[] | undefined) {
     const allowed = new Set<string>(GENRE_OPTIONS);
     return (genres?.filter((genre): genre is GenreOption => allowed.has(genre)) ?? []);
+}
+
+function FieldRow({ htmlFor, label, required, align = 'center', children }: FieldRowProps) {
+    return (
+        <div
+            className={[
+                'grid grid-cols-[minmax(5.5rem,36%)_minmax(0,1fr)] gap-3 sm:grid-cols-[9rem_minmax(0,1fr)]',
+                align === 'start' ? 'items-start' : 'items-center',
+            ].join(' ')}
+        >
+            <Label htmlFor={htmlFor} className={align === 'start' ? 'pt-2 leading-snug' : 'leading-snug'}>
+                {label}{required ? ' *' : ''}
+            </Label>
+            <div className="min-w-0">{children}</div>
+        </div>
+    );
 }
 
 type UrlListFieldProps = {
@@ -48,8 +72,7 @@ function removeLink(setLinks: Dispatch<SetStateAction<string[]>>, index: number)
 
 function UrlListField({ id, label, links, setLinks, addLabel }: UrlListFieldProps) {
     return (
-        <div className="flex flex-col gap-2">
-            <Label htmlFor={id}>{label}</Label>
+        <FieldRow htmlFor={id} label={label} align="start">
             <div className="flex flex-col gap-2">
                 {links.map((link, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -81,7 +104,7 @@ function UrlListField({ id, label, links, setLinks, addLabel }: UrlListFieldProp
                 <Plus/>
                 {addLabel}
             </Button>
-        </div>
+        </FieldRow>
     );
 }
 
@@ -107,7 +130,7 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
         );
     };
 
-    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
 
@@ -155,48 +178,42 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
 
     return (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-                <Label htmlFor="kind">Тип *</Label>
+            <FieldRow htmlFor="kind" label="Тип" required>
                 <select
                     id="kind"
                     name="kind"
                     required
                     value={kind}
                     onChange={(event) => setKind(event.currentTarget.value as NonNullable<MovieFormFields['kind']>)}
-                    className="h-9 rounded-md border border-input bg-field px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 sm:text-sm"
+                    className="h-9 w-full rounded-md border border-input bg-field px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 sm:text-sm"
                 >
                     {Object.entries(KIND_LABELS).map(([ value, label ]) => (
                         <option key={value} value={value}>{label}</option>
                     ))}
                 </select>
-            </div>
+            </FieldRow>
 
-            <div className="flex flex-col gap-2">
-                <Label htmlFor="title">Название *</Label>
+            <FieldRow htmlFor="title" label="Название" required>
                 <Input id="title" name="title" required maxLength={200} defaultValue={defaults?.title ?? ''}/>
-            </div>
+            </FieldRow>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="flex flex-col gap-2">
-                    <Label htmlFor="year">Год *</Label>
-                    <Input
-                        id="year"
-                        name="year"
-                        type="number"
-                        required
-                        min={1888}
-                        max={2100}
-                        defaultValue={defaults?.year ?? new Date().getFullYear()}
-                    />
-                </div>
-                <div className="flex flex-col gap-2 sm:col-span-2">
-                    <Label htmlFor="country">Страна *</Label>
-                    <Input id="country" name="country" required maxLength={100} defaultValue={defaults?.country ?? ''}/>
-                </div>
-            </div>
+            <FieldRow htmlFor="year" label="Год" required>
+                <Input
+                    id="year"
+                    name="year"
+                    type="number"
+                    required
+                    min={1888}
+                    max={2100}
+                    defaultValue={defaults?.year ?? new Date().getFullYear()}
+                />
+            </FieldRow>
 
-            <div className="flex flex-col gap-2">
-                <Label htmlFor="description">Описание *</Label>
+            <FieldRow htmlFor="country" label="Страна" required>
+                <Input id="country" name="country" required maxLength={100} defaultValue={defaults?.country ?? ''}/>
+            </FieldRow>
+
+            <FieldRow htmlFor="description" label="Описание" required align="start">
                 <Textarea
                     id="description"
                     name="description"
@@ -205,30 +222,27 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                     maxLength={5000}
                     defaultValue={defaults?.description ?? ''}
                 />
-            </div>
+            </FieldRow>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-2">
-                    <Label htmlFor="director">Режиссёр</Label>
-                    <Input id="director" name="director" maxLength={200} defaultValue={defaults?.director ?? ''}/>
-                </div>
-                <div className="flex flex-col gap-2">
-                    <Label htmlFor="durationMin">Длительность, мин</Label>
-                    <Input
-                        id="durationMin"
-                        name="durationMin"
-                        type="number"
-                        min={1}
-                        max={1000}
-                        defaultValue={defaults?.durationMin ?? ''}
-                    />
-                </div>
-            </div>
+            <FieldRow htmlFor="director" label="Режиссёр">
+                <Input id="director" name="director" maxLength={200} defaultValue={defaults?.director ?? ''}/>
+            </FieldRow>
+
+            <FieldRow htmlFor="durationMin" label="Длительность">
+                <Input
+                    id="durationMin"
+                    name="durationMin"
+                    type="number"
+                    min={1}
+                    max={1000}
+                    placeholder="мин"
+                    defaultValue={defaults?.durationMin ?? ''}
+                />
+            </FieldRow>
 
             {kind === 'SERIES' ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="flex flex-col gap-2">
-                        <Label htmlFor="seasonsCount">Сезонов</Label>
+                <>
+                    <FieldRow htmlFor="seasonsCount" label="Сезонов">
                         <Input
                             id="seasonsCount"
                             name="seasonsCount"
@@ -237,9 +251,8 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                             max={100}
                             defaultValue={defaults?.seasonsCount ?? ''}
                         />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                        <Label htmlFor="episodesPerSeason">Серии по сезонам</Label>
+                    </FieldRow>
+                    <FieldRow htmlFor="episodesPerSeason" label="Серии">
                         <Input
                             id="episodesPerSeason"
                             name="episodesPerSeason"
@@ -247,12 +260,11 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                             maxLength={500}
                             defaultValue={defaults?.episodesPerSeason ?? ''}
                         />
-                    </div>
-                </div>
+                    </FieldRow>
+                </>
             ) : null}
 
-            <div className="flex flex-col gap-2">
-                <Label htmlFor="starring">В главных ролях (через запятую)</Label>
+            <FieldRow htmlFor="starring" label="В ролях">
                 <Input
                     id="starring"
                     name="starring"
@@ -260,10 +272,9 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                     maxLength={500}
                     defaultValue={defaults?.starring ?? ''}
                 />
-            </div>
+            </FieldRow>
 
-            <div className="flex flex-col gap-2">
-                <Label>Жанры</Label>
+            <FieldRow label="Жанры" align="start">
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {GENRE_OPTIONS.map((genre) => {
                         const checked = selectedGenres.includes(genre);
@@ -288,29 +299,26 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                         );
                     })}
                 </div>
-            </div>
+            </FieldRow>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-2">
-                    <Label htmlFor="posterFile">Постер (JPEG/PNG/WebP, до 5 МБ)</Label>
-                    <Input
-                        id="posterFile"
-                        name="posterFile"
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="file:mr-2 file:rounded file:border-0 file:bg-secondary file:px-2 file:py-0.5 file:text-xs file:text-secondary-foreground"
-                    />
-                </div>
-                <div className="flex flex-col gap-2">
-                    <Label htmlFor="posterUrl">…или ссылка на постер</Label>
-                    <Input
-                        id="posterUrl"
-                        name="posterUrl"
-                        placeholder="https://..."
-                        defaultValue={defaults?.posterUrl ?? ''}
-                    />
-                </div>
-            </div>
+            <FieldRow htmlFor="posterFile" label="Постер">
+                <Input
+                    id="posterFile"
+                    name="posterFile"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="file:mr-2 file:rounded file:border-0 file:bg-secondary file:px-2 file:py-0.5 file:text-xs file:text-secondary-foreground"
+                />
+            </FieldRow>
+
+            <FieldRow htmlFor="posterUrl" label="Ссылка">
+                <Input
+                    id="posterUrl"
+                    name="posterUrl"
+                    placeholder="https://..."
+                    defaultValue={defaults?.posterUrl ?? ''}
+                />
+            </FieldRow>
 
             <UrlListField
                 id="trailerUrls"
