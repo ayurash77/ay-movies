@@ -60,6 +60,43 @@ export function PaginatedMovieGallery({
         }
     };
 
+    const handleLoadCompleteSet = async () => {
+        if (isLoadingMore || page.nextCursor === null) return;
+        const requestQueryKey = queryKey;
+        let cursor: number | null = page.nextCursor;
+        const loadedItems: MovieSearchPage['items'] = [];
+        let total = page.total;
+
+        setIsLoadingMore(true);
+        try {
+            while (cursor !== null) {
+                const requestCursor: number = cursor;
+                const nextPage: MovieSearchPage = await searchMovies({
+                    data: { ...query, cursor: requestCursor },
+                });
+                if (queryKeyRef.current !== requestQueryKey) return;
+                loadedItems.push(...nextPage.items);
+                cursor = nextPage.nextCursor;
+                total = nextPage.total;
+            }
+
+            setPage((current) => {
+                if (queryKeyRef.current !== requestQueryKey) return current;
+                const existingIds = new Set(current.items.map((movie) => movie.id));
+                const newItems = loadedItems.filter((movie) => !existingIds.has(movie.id));
+                return {
+                    items: [ ...current.items, ...newItems ],
+                    nextCursor: null,
+                    total,
+                };
+            });
+        } catch {
+            toast.error('Не удалось загрузить фильмы');
+        } finally {
+            setIsLoadingMore(false);
+        }
+    };
+
     return (
         <div className="flex flex-col gap-5">
             <MovieGallery
@@ -67,6 +104,7 @@ export function PaginatedMovieGallery({
                 emptyText={emptyText}
                 controlsStart={controlsStart}
                 controlsEnd={controlsEnd}
+                onNeedCompleteSet={handleLoadCompleteSet}
             />
             {page.total > 0 ? (
                 <div className="flex flex-col items-center gap-2">

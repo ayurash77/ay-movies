@@ -20,6 +20,7 @@ type MovieGalleryProps = {
     emptyText?: string;
     controlsStart?: ReactNode;
     controlsEnd?: ReactNode;
+    onNeedCompleteSet?: () => void;
 };
 
 const DOMESTIC_COUNTRIES = new Set([ 'россия', 'рф', 'ссср' ]);
@@ -100,7 +101,13 @@ function GenreCards({
     );
 }
 
-export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: MovieGalleryProps) {
+export function MovieGallery({
+    movies,
+    emptyText,
+    controlsStart,
+    controlsEnd,
+    onNeedCompleteSet,
+}: MovieGalleryProps) {
     const [ groupByOrigin, setGroupByOrigin ] = useState(true);
     const [ groupByCountry, setGroupByCountry ] = useState(false);
     const [ groupByGenre, setGroupByGenre ] = useState(false);
@@ -133,6 +140,12 @@ export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: 
             else next.add(country);
             return next;
         });
+    };
+
+    const setGenreGrouping = (checked: boolean) => {
+        setGroupByGenre(checked);
+        setSelectedGenre(null);
+        if (checked) onNeedCompleteSet?.();
     };
 
     const renderCountryGroups = (items: MovieCardData[]) => {
@@ -234,8 +247,7 @@ export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: 
                                 onSelect={() => {
                                     setGroupByOrigin(true);
                                     setGroupByCountry(true);
-                                    setGroupByGenre(true);
-                                    setSelectedGenre(null);
+                                    setGenreGrouping(true);
                                 }}
                             >
                                 Отметить все
@@ -265,10 +277,7 @@ export function MovieGallery({ movies, emptyText, controlsStart, controlsEnd }: 
                             </DropdownMenuCheckboxItem>
                             <DropdownMenuCheckboxItem
                                 checked={groupByGenre}
-                                onCheckedChange={(checked) => {
-                                    setGroupByGenre(Boolean(checked));
-                                    setSelectedGenre(null);
-                                }}
+                                onCheckedChange={(checked) => setGenreGrouping(Boolean(checked))}
                             >
                                 Жанры
                             </DropdownMenuCheckboxItem>
