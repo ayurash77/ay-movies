@@ -1,4 +1,4 @@
-FROM node:24-slim
+FROM mirror.gcr.io/library/node:24-slim
 
 WORKDIR /app
 
