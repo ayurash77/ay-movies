@@ -72,7 +72,8 @@ function removeLink(setLinks: Dispatch<SetStateAction<string[]>>, index: number)
 
 function UrlListField({ id, label, links, setLinks, addLabel }: UrlListFieldProps) {
     return (
-        <FieldRow htmlFor={id} label={label} align="start">
+        <div className="flex flex-col gap-2">
+            <Label htmlFor={id}>{label}</Label>
             <div className="flex flex-col gap-2">
                 {links.map((link, index) => (
                     <div key={index} className="flex items-center gap-2">
@@ -104,7 +105,7 @@ function UrlListField({ id, label, links, setLinks, addLabel }: UrlListFieldProp
                 <Plus/>
                 {addLabel}
             </Button>
-        </FieldRow>
+        </div>
     );
 }
 
@@ -213,7 +214,8 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                 <Input id="country" name="country" required maxLength={100} defaultValue={defaults?.country ?? ''}/>
             </FieldRow>
 
-            <FieldRow htmlFor="description" label="Описание" required align="start">
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="description">Описание *</Label>
                 <Textarea
                     id="description"
                     name="description"
@@ -222,7 +224,7 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                     maxLength={5000}
                     defaultValue={defaults?.description ?? ''}
                 />
-            </FieldRow>
+            </div>
 
             <FieldRow htmlFor="director" label="Режиссёр">
                 <Input id="director" name="director" maxLength={200} defaultValue={defaults?.director ?? ''}/>
