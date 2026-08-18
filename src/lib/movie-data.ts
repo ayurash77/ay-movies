@@ -1,3 +1,5 @@
+import type { GenreOption } from './genre-groups';
+
 export const movieSortOptions = [ 'new', 'rating', 'year', 'title' ] as const;
 export type MovieSort = (typeof movieSortOptions)[number];
 
@@ -74,7 +76,7 @@ export type MovieFormFields = {
     trailerUrls?: string[];
     watchLinks?: string[];
     director?: string;
-    genres?: string;
+    genres?: GenreOption[];
     starring?: string;
     durationMin?: number | '';
     seasonsCount?: number | '';

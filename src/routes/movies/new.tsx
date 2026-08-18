@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { MovieForm } from '@/components/movies/MovieForm';
 import { lookupMovie } from '@/server/movie-lookup';
 import { createMovie } from '@/server/movies';
+import { normalizeGenreOptions } from '@/lib/genre-groups';
 import { movieKindOptions, type MovieFormFields } from '@/lib/movie-data';
 
 export const Route = createFileRoute('/movies/new')({
@@ -63,7 +64,7 @@ function NewMoviePage() {
                 country: movie.country ?? '',
                 description: movie.description ?? '',
                 director: movie.director ?? '',
-                genres: movie.genres?.join(', ') ?? '',
+                genres: normalizeGenreOptions(movie.genres ?? []),
                 starring: movie.starring?.join(', ') ?? '',
                 durationMin: movie.durationMin ?? '',
                 posterUrl: movie.posterUrl ?? '',
@@ -120,7 +121,9 @@ function NewMoviePage() {
                         onSubmit={async (fields) => {
                             const result = await createMovie({ data: fields });
                             if (result.ok) {
-                                toast.success('Фильм добавлен');
+                                toast.success(result.existing
+                                    ? 'Такой фильм уже есть — открываю карточку'
+                                    : 'Фильм добавлен');
                                 navigate({ to: '/movies/$movieId', params: { movieId: result.movieId } });
                             } else {
                                 toast.error(result.error);

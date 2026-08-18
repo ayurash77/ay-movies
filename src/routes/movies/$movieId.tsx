@@ -8,6 +8,7 @@ import { MoviePoster } from '@/components/movies/MoviePoster';
 import { RatingStars } from '@/components/movies/RatingStars';
 import { WatchButtons } from '@/components/movies/WatchButtons';
 import { Button } from '@/components/ui/button';
+import { normalizeStoredGenres } from '@/lib/movie-merge';
 import { formatRating } from '@/lib/utils';
 import { getComments } from '@/server/comments';
 import { getMovie, rateMovie } from '@/server/movies';
@@ -74,6 +75,7 @@ function MoviePage() {
     const { movie, comments } = Route.useLoaderData();
     const { user } = Route.useRouteContext();
     const router = useRouter();
+    const displayGenres = normalizeStoredGenres(movie.genres);
 
     const handleRate = async (value: number) => {
         const result = await rateMovie({ data: { movieId: movie.id, value } });
@@ -153,9 +155,9 @@ function MoviePage() {
                         </span>
                     </div>
 
-                    {movie.genres.length > 0 ? (
+                    {displayGenres.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
-                            {movie.genres.map((genre) => (
+                            {displayGenres.map((genre) => (
                                 <span
                                     key={genre}
                                     className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground"

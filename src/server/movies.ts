@@ -12,6 +12,8 @@ import {
     type MovieSort,
     type MovieSortDir,
 } from '@/lib/movie-data';
+import { GENRE_OPTIONS, normalizeGenre } from '@/lib/genre-groups';
+import { buildMovieDedupeKey } from '@/lib/movie-dedupe';
 import { toServedUploadUrl } from '@/lib/upload-url';
 
 const MOVIE_PAGE_SIZE = 48;
@@ -102,8 +104,24 @@ const searchMoviesSchema = z.object({
 type SearchMoviesData = z.output<typeof searchMoviesSchema>;
 type Db = Awaited<ReturnType<typeof getDb>>;
 
+function uniqueItems(items: string[]) {
+    return [ ...new Set(items.filter(Boolean)) ];
+}
+
+function genreSearchTerms(q: string) {
+    const normalizedGenre = normalizeGenre(q);
+    return uniqueItems([
+        q,
+        q.toLowerCase(),
+        normalizedGenre === 'Другое' && q.trim().toLowerCase() !== 'другое'
+            ? ''
+            : normalizedGenre,
+    ]);
+}
+
 function searchWhere(data: SearchMoviesData) {
     const q = data.q;
+    const genreTerms = q ? genreSearchTerms(q) : [];
     return {
         ...(data.kind ? { kind: data.kind } : {}),
         ...(q
@@ -112,7 +130,7 @@ function searchWhere(data: SearchMoviesData) {
                     { title: { contains: q, mode: 'insensitive' as const } },
                     { director: { contains: q, mode: 'insensitive' as const } },
                     { country: { contains: q, mode: 'insensitive' as const } },
-                    { genres: { has: q.toLowerCase() } },
+                    { genres: { hasSome: genreTerms } },
                 ],
             }
             : {}),
@@ -132,13 +150,15 @@ function searchSqlWhere(data: SearchMoviesData) {
     if (q) {
         params.push(`%${q}%`);
         const searchParam = `$${params.length}`;
-        params.push(q.toLowerCase());
-        const genreParam = `$${params.length}`;
+        const genreChecks = genreSearchTerms(q).map((term) => {
+            params.push(term);
+            return `m."genres" @> ARRAY[$${params.length}]::text[]`;
+        });
         conditions.push(`(
             m."title" ILIKE ${searchParam}
             OR m."director" ILIKE ${searchParam}
             OR m."country" ILIKE ${searchParam}
-            OR m."genres" @> ARRAY[${genreParam}]::text[]
+            ${genreChecks.map((check) => `OR ${check}`).join('\n')}
         )`);
     }
 
@@ -302,6 +322,8 @@ const urlListSchema = z
     .max(20)
     .optional();
 
+const genreListSchema = z.array(z.enum(GENRE_OPTIONS)).max(GENRE_OPTIONS.length).optional();
+
 const movieFieldsSchema = z.object({
     kind: z.enum(movieKindOptions).optional(),
     title: z.string().trim().min(1).max(200),
@@ -319,7 +341,7 @@ const movieFieldsSchema = z.object({
     trailerUrls: urlListSchema,
     watchLinks: urlListSchema,
     director: z.string().trim().max(200).optional(),
-    genres: z.string().trim().max(300).optional(),
+    genres: genreListSchema,
     starring: z.string().trim().max(500).optional(),
     durationMin: z.union([ z.literal(''), z.coerce.number().int().min(1).max(1000) ]).optional(),
     seasonsCount: z.union([ z.literal(''), z.coerce.number().int().min(1).max(100) ]).optional(),
@@ -331,9 +353,11 @@ function splitList(value: string | undefined) {
 }
 
 function toMovieData(data: z.output<typeof movieFieldsSchema>) {
+    const kind = data.kind ?? 'MOVIE';
     return {
         title: data.title,
-        kind: data.kind ?? 'MOVIE',
+        kind,
+        dedupeKey: buildMovieDedupeKey({ kind, title: data.title, year: data.year }),
         year: data.year,
         country: data.country,
         description: data.description,
@@ -341,7 +365,7 @@ function toMovieData(data: z.output<typeof movieFieldsSchema>) {
         trailerUrls: data.trailerUrls ?? [],
         watchLinks: data.watchLinks ?? [],
         director: data.director || null,
-        genres: splitList(data.genres),
+        genres: uniqueItems(data.genres ?? []),
         starring: splitList(data.starring),
         durationMin: data.durationMin === '' ? null : data.durationMin ?? null,
         seasonsCount: data.kind === 'SERIES' && data.seasonsCount !== ''
@@ -353,6 +377,49 @@ function toMovieData(data: z.output<typeof movieFieldsSchema>) {
     };
 }
 
+type MovieWriteData = ReturnType<typeof toMovieData>;
+
+const duplicateMovieSelect = {
+    id: true,
+    kind: true,
+    title: true,
+    year: true,
+} as const;
+
+function isUniqueConstraintError(error: unknown) {
+    return typeof error === 'object'
+        && error !== null
+        && 'code' in error
+        && (error as { code?: unknown }).code === 'P2002';
+}
+
+async function findDuplicateMovie(
+    db: Db,
+    movieData: Pick<MovieWriteData, 'kind' | 'title' | 'year' | 'dedupeKey'>,
+    excludeMovieId?: string,
+) {
+    if (!movieData.dedupeKey) return null;
+
+    const existingByKey = await db.movie.findUnique({
+        where: { dedupeKey: movieData.dedupeKey },
+        select: duplicateMovieSelect,
+    });
+    if (existingByKey && existingByKey.id !== excludeMovieId) return existingByKey;
+
+    const candidates = await db.movie.findMany({
+        where: {
+            kind: movieData.kind,
+            year: movieData.year,
+            ...(excludeMovieId ? { id: { not: excludeMovieId } } : {}),
+        },
+        select: duplicateMovieSelect,
+    });
+
+    return candidates.find((candidate) =>
+        buildMovieDedupeKey(candidate) === movieData.dedupeKey,
+    ) ?? null;
+}
+
 export const createMovie = createServerFn({ method: 'POST' })
     .validator(movieFieldsSchema)
     .handler(async ({ data }) => {
@@ -362,9 +429,27 @@ export const createMovie = createServerFn({ method: 'POST' })
             return { ok: false as const, error: 'Требуется авторизация' };
         }
 
-        const movie = await db.movie.create({
-            data: { ...toMovieData(data), createdById: user.id },
-        });
+        const movieData = toMovieData(data);
+        const duplicate = await findDuplicateMovie(db, movieData);
+        if (duplicate) {
+            return { ok: true as const, movieId: duplicate.id, existing: true as const };
+        }
+
+        let movie;
+        try {
+            movie = await db.movie.create({
+                data: { ...movieData, createdById: user.id },
+            });
+        } catch (error) {
+            if (!isUniqueConstraintError(error)) throw error;
+            const existing = await db.movie.findUnique({
+                where: { dedupeKey: movieData.dedupeKey },
+                select: { id: true },
+            });
+            if (existing) return { ok: true as const, movieId: existing.id, existing: true as const };
+            throw error;
+        }
+
         try {
             const { createMovieNotifications } = await import('./notifications');
             await createMovieNotifications(movie.id, user.id);
@@ -396,7 +481,30 @@ export const updateMovie = createServerFn({ method: 'POST' })
         }
 
         const { movieId, ...fields } = data;
-        await db.movie.update({ where: { id: movieId }, data: toMovieData(fields) });
+        const movieData = toMovieData(fields);
+        const duplicate = await findDuplicateMovie(db, movieData, movieId);
+        if (duplicate) {
+            return {
+                ok: false as const,
+                error: 'Такой фильм уже есть',
+                movieId: duplicate.id,
+            };
+        }
+
+        try {
+            await db.movie.update({ where: { id: movieId }, data: movieData });
+        } catch (error) {
+            if (!isUniqueConstraintError(error)) throw error;
+            const existing = await db.movie.findUnique({
+                where: { dedupeKey: movieData.dedupeKey },
+                select: { id: true },
+            });
+            return {
+                ok: false as const,
+                error: 'Такой фильм уже есть',
+                movieId: existing?.id ?? movieId,
+            };
+        }
 
         return { ok: true as const, movieId };
     });

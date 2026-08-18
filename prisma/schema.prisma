@@ -69,6 +69,7 @@ model UserFollow {
 model Movie {
   id                String         @id @default(cuid())
   kind              MovieKind      @default(MOVIE)
+  dedupeKey         String?        @unique
   title             String
   year              Int
   country           String
@@ -92,6 +93,7 @@ model Movie {
 
   @@index([createdAt])
   @@index([kind, createdAt])
+  @@index([kind, year])
 }
 
 model Notification {

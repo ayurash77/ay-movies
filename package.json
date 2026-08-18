@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:branding": "node --test scripts/branding.test.mjs",
+    "test:dedupe": "tsx --test scripts/movie-dedupe.test.ts",
     "test:genres": "tsx --test scripts/genre-groups.test.ts",
+    "test:merge": "tsx --test scripts/movie-merge.test.ts",
     "typecheck": "tsc --noEmit",
     "dc:up": "docker compose up -d",
     "dc:down": "docker compose down",
@@ -16,7 +18,8 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:merge-movie-duplicates": "tsx scripts/merge-duplicate-movies.ts --apply"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

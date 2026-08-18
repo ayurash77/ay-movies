@@ -3,7 +3,7 @@ type GenreRule = {
     patterns: Array<string | RegExp>;
 };
 
-export const STANDARD_GENRES = [
+export const GENRE_OPTIONS = [
     'Анимация',
     'Боевик',
     'Детектив',
@@ -16,6 +16,12 @@ export const STANDARD_GENRES = [
     'Ужасы',
     'Фантастика',
     'Фэнтези',
+] as const;
+
+export type GenreOption = (typeof GENRE_OPTIONS)[number];
+
+export const STANDARD_GENRES = [
+    ...GENRE_OPTIONS,
     'Другое',
 ] as const;
 
@@ -56,6 +62,15 @@ export function normalizeGenre(value: string) {
         ),
     );
     return rule?.genre ?? 'Другое';
+}
+
+export function isGenreOption(value: string): value is GenreOption {
+    return (GENRE_OPTIONS as readonly string[]).includes(value);
+}
+
+export function normalizeGenreOptions(genres: string[]) {
+    const normalized = genres.map(normalizeGenre).filter(isGenreOption);
+    return [ ...new Set(normalized) ];
 }
 
 export function movieGenreGroups(genres: string[]) {

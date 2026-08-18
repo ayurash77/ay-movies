@@ -7,6 +7,7 @@ import { PageTitle } from '@/components/AppTitle';
 import { Card, CardContent } from '@/components/ui/card';
 import { MovieForm } from '@/components/movies/MovieForm';
 import { getMovie, updateMovie } from '@/server/movies';
+import { normalizeGenreOptions } from '@/lib/genre-groups';
 
 export const Route = createFileRoute('/movies/$movieId_/edit')({
     beforeLoad: ({ context, params }) => {
@@ -64,7 +65,7 @@ function EditMoviePage() {
                             trailerUrls: movie.trailerUrls,
                             watchLinks: movie.watchLinks,
                             director: movie.director ?? '',
-                            genres: movie.genres.join(', '),
+                            genres: normalizeGenreOptions(movie.genres),
                             starring: movie.starring.join(', '),
                             durationMin: movie.durationMin ?? '',
                             seasonsCount: movie.seasonsCount ?? '',
@@ -77,6 +78,9 @@ function EditMoviePage() {
                                 navigate({ to: '/movies/$movieId', params: { movieId: movie.id } });
                             } else {
                                 toast.error(result.error);
+                                if ('movieId' in result && result.movieId && result.movieId !== movie.id) {
+                                    navigate({ to: '/movies/$movieId', params: { movieId: result.movieId } });
+                                }
                             }
                         }}
                     />

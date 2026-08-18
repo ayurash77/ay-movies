@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { groupMoviesByGenres, normalizeGenre } from '../src/lib/genre-groups';
+import { GENRE_OPTIONS, groupMoviesByGenres, normalizeGenre, normalizeGenreOptions } from '../src/lib/genre-groups';
 
 test('normalizes close genre names into one standard genre', () => {
     assert.equal(normalizeGenre('Драма'), 'Драма');
@@ -58,4 +58,28 @@ test('keeps genre groups compact for detailed movie genres', () => {
         'Мелодрама',
         'Фантастика',
     ]);
+});
+
+test('exposes only concrete genres for movie forms', () => {
+    assert.deepEqual(GENRE_OPTIONS, [
+        'Анимация',
+        'Боевик',
+        'Детектив',
+        'Драма',
+        'Комедия',
+        'Криминал',
+        'Мелодрама',
+        'Приключения',
+        'Триллер',
+        'Ужасы',
+        'Фантастика',
+        'Фэнтези',
+    ]);
+});
+
+test('normalizes movie form genres without the generic fallback option', () => {
+    assert.deepEqual(
+        normalizeGenreOptions([ 'драматический фильм', 'бадди-муви', 'триллер' ]),
+        [ 'Драма', 'Триллер' ],
+    );
 });

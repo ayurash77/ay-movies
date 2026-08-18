@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { GENRE_OPTIONS, type GenreOption } from '@/lib/genre-groups';
 import type { MovieFormFields } from '@/lib/movie-data';
 import { uploadPoster } from '@/server/uploads';
 
@@ -20,6 +21,11 @@ const KIND_LABELS: Record<NonNullable<MovieFormFields['kind']>, string> = {
     SERIES: 'Сериал',
     CARTOON: 'Мультфильм',
 };
+
+function defaultSelectedGenres(genres: string[] | undefined) {
+    const allowed = new Set<string>(GENRE_OPTIONS);
+    return (genres?.filter((genre): genre is GenreOption => allowed.has(genre)) ?? []);
+}
 
 type UrlListFieldProps = {
     id: string;
@@ -88,7 +94,18 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
     const [ watchLinks, setWatchLinks ] = useState<string[]>(
         defaults?.watchLinks?.length ? defaults.watchLinks : [ '' ],
     );
+    const [ selectedGenres, setSelectedGenres ] = useState<GenreOption[]>(() =>
+        defaultSelectedGenres(defaults?.genres),
+    );
     const posterPreviewUrl = defaults?.posterUrl?.trim();
+
+    const toggleGenre = (genre: GenreOption) => {
+        setSelectedGenres((current) =>
+            current.includes(genre)
+                ? current.filter((item) => item !== genre)
+                : [ ...current, genre ],
+        );
+    };
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -119,7 +136,7 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                 trailerUrls: trailerUrls.map((link) => link.trim()).filter(Boolean),
                 watchLinks: watchLinks.map((link) => link.trim()).filter(Boolean),
                 director: String(form.get('director') ?? ''),
-                genres: String(form.get('genres') ?? ''),
+                genres: selectedGenres,
                 starring: String(form.get('starring') ?? ''),
                 durationMin: form.get('durationMin')
                     ? Number(form.get('durationMin'))
@@ -246,14 +263,31 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
             </div>
 
             <div className="flex flex-col gap-2">
-                <Label htmlFor="genres">Жанры (через запятую)</Label>
-                <Input
-                    id="genres"
-                    name="genres"
-                    placeholder="драма, триллер"
-                    maxLength={300}
-                    defaultValue={defaults?.genres ?? ''}
-                />
+                <Label>Жанры</Label>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {GENRE_OPTIONS.map((genre) => {
+                        const checked = selectedGenres.includes(genre);
+                        return (
+                            <label
+                                key={genre}
+                                className={[
+                                    'flex h-9 cursor-pointer items-center justify-center rounded-md border px-2 text-sm transition-colors',
+                                    checked
+                                        ? 'border-primary bg-primary text-primary-foreground'
+                                        : 'border-border bg-field/50 text-muted-foreground hover:bg-field',
+                                ].join(' ')}
+                            >
+                                <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={checked}
+                                    onChange={() => toggleGenre(genre)}
+                                />
+                                {genre}
+                            </label>
+                        );
+                    })}
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
