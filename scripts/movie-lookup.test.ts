@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
     buildLookupAttempts,
     claimSeriesInfo,
+    claimSeriesParts,
     claimYear,
     isMediaEntity,
     type LookupWikidataEntity,
@@ -13,10 +14,19 @@ function entity(
     ids: string[],
     dates: Record<string, string[]> = {},
     quantities: Record<string, string[]> = {},
+    parts: Array<{ id: string; ordinal: number }> = [],
 ): LookupWikidataEntity {
     return {
         claims: {
             P31: ids.map((id) => ({ mainsnak: { datavalue: { value: { id } } } })),
+            P527: parts.map((part) => ({
+                mainsnak: { datavalue: { value: { id: part.id } } },
+                qualifiers: {
+                    P1545: [
+                        { datavalue: { value: String(part.ordinal) } },
+                    ],
+                },
+            })),
             ...Object.fromEntries(
                 Object.entries(dates).map(([ prop, values ]) => [
                     prop,
@@ -48,6 +58,7 @@ test('movie lookup accepts media entities and rejects people', () => {
     assert.equal(isMediaEntity(entity([ 'Q5398426' ]), ''), true);
     assert.equal(isMediaEntity(entity([ 'Q11424' ]), ''), true);
     assert.equal(isMediaEntity(entity([ 'Q5' ]), 'Паоло Соррентино'), false);
+    assert.equal(isMediaEntity(entity([ 'Q4167410' ]), 'Игра престолов — книга и телесериал'), false);
 });
 
 test('movie lookup reads series start year when publication date is absent', () => {
@@ -58,5 +69,28 @@ test('movie lookup reads seasons and evenly distributed episode counts for serie
     assert.deepEqual(
         claimSeriesInfo(entity([ 'Q5398426' ], {}, { P2437: [ '+5' ], P1113: [ '+30' ] })),
         { seasonsCount: 5, episodesPerSeason: [ 6, 6, 6, 6, 6 ] },
+    );
+});
+
+test('movie lookup reads per-season episode counts from season items', () => {
+    const series = entity([ 'Q5398426' ], {}, { P2437: [ '+8' ], P1113: [ '+73' ] }, [
+        { id: 's1', ordinal: 1 },
+        { id: 's2', ordinal: 2 },
+        { id: 's3', ordinal: 3 },
+        { id: 's4', ordinal: 4 },
+        { id: 's5', ordinal: 5 },
+        { id: 's6', ordinal: 6 },
+        { id: 's7', ordinal: 7 },
+        { id: 's8', ordinal: 8 },
+    ]);
+    const parts = claimSeriesParts(series);
+
+    assert.deepEqual(parts.map((part) => part.ordinal), [ 1, 2, 3, 4, 5, 6, 7, 8 ]);
+    assert.deepEqual(
+        claimSeriesInfo(series, parts.map((part, index) => ({
+            ...part,
+            entity: entity([ 'Q3464665' ], {}, { P1113: [ `+${index < 6 ? 10 : index === 6 ? 7 : 6}` ] }),
+        }))),
+        { seasonsCount: 8, episodesPerSeason: [ 10, 10, 10, 10, 10, 10, 7, 6 ] },
     );
 });

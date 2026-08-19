@@ -6,6 +6,7 @@ import {
     buildLookupAttempts,
     claimDuration,
     claimSeriesInfo,
+    claimSeriesParts,
     claimYear,
     classifyKind,
     entityIds,
@@ -136,8 +137,12 @@ async function buildMovie(lang: LookupLang, page: WikiPage): Promise<MovieLookup
         ? entity?.labels?.en?.value ?? page.title
         : entity?.labels?.en?.value ?? null;
     const kind = classifyKind(entity, mediaText, genres);
+    const seriesParts = kind === 'SERIES' ? claimSeriesParts(entity).slice(0, 30) : [];
+    const seasonEntities = seriesParts.length
+        ? await Promise.all(seriesParts.map((part) => loadWikidata(part.id)))
+        : [];
     const seriesInfo = kind === 'SERIES'
-        ? claimSeriesInfo(entity)
+        ? claimSeriesInfo(entity, seriesParts.map((part, index) => ({ ...part, entity: seasonEntities[index] ?? null })))
         : { seasonsCount: null, episodesPerSeason: [] };
     const genreHints = [
         ...genres,

@@ -12,6 +12,11 @@ export type LookupWikidataEntity = {
                 value?: unknown;
             };
         };
+        qualifiers?: Record<string, Array<{
+            datavalue?: {
+                value?: unknown;
+            };
+        }>>;
     }>>;
 };
 
@@ -21,6 +26,14 @@ const MEDIA_INSTANCE_IDS = new Set([
     'Q15416', // television program
     'Q202866', // animated film
     'Q581714', // animated series
+]);
+
+const NON_MEDIA_INSTANCE_IDS = new Set([
+    'Q5', // human
+    'Q4167410', // Wikimedia disambiguation page
+    'Q571', // book
+    'Q7725634', // literary work
+    'Q47461344', // written work
 ]);
 
 export function buildLookupAttempts(title: string): Array<[ LookupLang, string ]> {
@@ -83,15 +96,55 @@ function claimQuantity(entity: LookupWikidataEntity | null, prop: string) {
     return amount;
 }
 
-export function claimSeriesInfo(entity: LookupWikidataEntity | null) {
+export type LookupSeriesPart = {
+    id: string;
+    ordinal: number;
+};
+
+export type LookupSeriesPartEntity = LookupSeriesPart & {
+    entity: LookupWikidataEntity | null;
+};
+
+export function claimSeriesParts(entity: LookupWikidataEntity | null): LookupSeriesPart[] {
+    return entity?.claims?.P527
+        ?.map((claim) => {
+            const value = claim.mainsnak?.datavalue?.value;
+            const id = typeof value === 'object' && value && 'id' in value ? String(value.id) : '';
+            const rawOrdinal = claim.qualifiers?.P1545?.[0]?.datavalue?.value;
+            const ordinal = Number(rawOrdinal);
+            return id && Number.isInteger(ordinal) && ordinal > 0
+                ? { id, ordinal }
+                : null;
+        })
+        .filter((value): value is LookupSeriesPart => Boolean(value))
+        .sort((a, b) => a.ordinal - b.ordinal) ?? [];
+}
+
+export function claimSeriesInfo(
+    entity: LookupWikidataEntity | null,
+    seasonEntities: LookupSeriesPartEntity[] = [],
+) {
     const seasonsCount = claimQuantity(entity, 'P2437');
     const totalEpisodes = claimQuantity(entity, 'P1113');
-    const episodesPerSeason = seasonsCount && totalEpisodes && totalEpisodes % seasonsCount === 0
+    const seasonCounts = seasonEntities
+        .map((part) => ({
+            ordinal: part.ordinal,
+            count: claimQuantity(part.entity, 'P1113'),
+        }))
+        .filter((part): part is { ordinal: number; count: number } => Boolean(part.count))
+        .sort((a, b) => a.ordinal - b.ordinal);
+    const inferredSeasonsCount = seasonsCount ?? (seasonCounts.length ? Math.max(...seasonCounts.map((part) => part.ordinal)) : null);
+    const completeSeasonCounts = inferredSeasonsCount
+        && seasonCounts.length === inferredSeasonsCount
+        && seasonCounts.every((part, index) => part.ordinal === index + 1);
+    const episodesPerSeason = completeSeasonCounts
+        ? seasonCounts.map((part) => part.count)
+        : seasonsCount && totalEpisodes && totalEpisodes % seasonsCount === 0
         ? Array.from({ length: seasonsCount }, () => totalEpisodes / seasonsCount)
         : [];
 
     return {
-        seasonsCount,
+        seasonsCount: inferredSeasonsCount,
         episodesPerSeason,
     };
 }
@@ -102,7 +155,7 @@ export function isMediaEntity(entity: LookupWikidataEntity | null, text: string)
         ...entityIds(entity, 'P136'),
     ]);
 
-    if (ids.has('Q5')) return false;
+    if ([ ...NON_MEDIA_INSTANCE_IDS ].some((id) => ids.has(id))) return false;
     if ([ ...MEDIA_INSTANCE_IDS ].some((id) => ids.has(id))) return true;
 
     const normalized = text.toLowerCase();
