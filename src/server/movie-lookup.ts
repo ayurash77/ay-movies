@@ -5,6 +5,7 @@ import { movieKindOptions } from '@/lib/movie-data';
 import {
     buildLookupAttempts,
     claimDuration,
+    claimSeriesInfo,
     claimYear,
     classifyKind,
     entityIds,
@@ -26,6 +27,8 @@ const lookupResultSchema = z.object({
     genres: z.array(z.string()).nullish(),
     starring: z.array(z.string()).nullish(),
     durationMin: z.number().int().nullish(),
+    seasonsCount: z.number().int().nullish(),
+    episodesPerSeason: z.array(z.number().int()).nullish(),
     posterUrl: z.string().nullish(),
 });
 
@@ -46,17 +49,24 @@ type WikiPageResponse = {
     query?: { pages?: Record<string, WikiPage> };
 };
 
+function delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function getJson<T>(url: string): Promise<T | null> {
-    try {
-        const res = await fetch(url, {
-            signal: AbortSignal.timeout(12000),
-            headers: { 'user-agent': 'AY Movies/1.0 (movie metadata lookup)' },
-        });
-        if (!res.ok) return null;
-        return (await res.json()) as T;
-    } catch {
-        return null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+            const res = await fetch(url, {
+                signal: AbortSignal.timeout(15000),
+                headers: { 'user-agent': 'AY Movies/1.0 (movie metadata lookup)' },
+            });
+            if (!res.ok) return null;
+            return (await res.json()) as T;
+        } catch {
+            if (attempt < 2) await delay(500 * (attempt + 1));
+        }
     }
+    return null;
 }
 
 async function searchWiki(lang: LookupLang, query: string) {
@@ -64,7 +74,7 @@ async function searchWiki(lang: LookupLang, query: string) {
         action: 'query',
         list: 'search',
         srsearch: query,
-        srlimit: '5',
+        srlimit: '8',
         format: 'json',
     });
     const json = await getJson<WikiSearchResponse>(`https://${lang}.wikipedia.org/w/api.php?${params}`);
@@ -125,19 +135,30 @@ async function buildMovie(lang: LookupLang, page: WikiPage): Promise<MovieLookup
     const originalTitle = lang === 'en'
         ? entity?.labels?.en?.value ?? page.title
         : entity?.labels?.en?.value ?? null;
+    const kind = classifyKind(entity, mediaText, genres);
+    const seriesInfo = kind === 'SERIES'
+        ? claimSeriesInfo(entity)
+        : { seasonsCount: null, episodesPerSeason: [] };
+    const genreHints = [
+        ...genres,
+        entity?.descriptions?.ru?.value,
+        entity?.descriptions?.en?.value,
+    ].filter((value): value is string => Boolean(value));
 
     return {
         found: true,
-        kind: classifyKind(entity, mediaText, genres),
+        kind,
         title,
         originalTitle,
         year: claimYear(entity),
         country: countries.join(', ') || null,
         description: firstSentences(page.extract),
         director: directors.join(', ') || null,
-        genres: genres.map((item) => item.toLowerCase()),
+        genres: genreHints.map((item) => item.toLowerCase()),
         starring: cast,
         durationMin: claimDuration(entity),
+        seasonsCount: seriesInfo.seasonsCount,
+        episodesPerSeason: seriesInfo.episodesPerSeason,
         posterUrl: page.thumbnail?.source ?? null,
     };
 }
@@ -163,7 +184,7 @@ export const lookupMovie = createServerFn({ method: 'POST' })
 
         for (const [ lang, query ] of attempts) {
             const titles = await searchWiki(lang, query);
-            for (const title of titles.slice(0, 3)) {
+            for (const title of titles.slice(0, 5)) {
                 const page = await loadWikiPage(lang, title);
                 if (!page) continue;
                 const movie = await buildMovie(lang, page);

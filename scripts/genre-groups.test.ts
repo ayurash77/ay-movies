@@ -16,6 +16,8 @@ test('normalizes close genre names into one standard genre', () => {
     assert.equal(normalizeGenre('фэнтезийный фильм'), 'Фэнтези');
     assert.equal(normalizeGenre('фильм ужасов'), 'Ужасы');
     assert.equal(normalizeGenre('психологический фильм-триллер'), 'Триллер');
+    assert.equal(normalizeGenre('шпионский триллер'), 'Шпионский');
+    assert.equal(normalizeGenre('spy thriller'), 'Шпионский');
     assert.equal(normalizeGenre('бадди-муви'), 'Другое');
 });
 
@@ -70,6 +72,7 @@ test('exposes only concrete genres for movie forms', () => {
         'Криминал',
         'Мелодрама',
         'Приключения',
+        'Шпионский',
         'Триллер',
         'Ужасы',
         'Фантастика',

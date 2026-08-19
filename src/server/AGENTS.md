@@ -16,7 +16,7 @@
 - `session.ts` — server-only cookie/session helpers.
 - `password.ts` — scrypt hashing.
 - `movies.ts` — каталог, поиск, пагинация, CRUD, рейтинги, watch lists.
-- `movie-lookup.ts` — автозаполнение без AI tokens через Wikipedia/Wikidata; сначала пробует точную страницу, затем search, фильтрует не-media сущности и для сериалов берет год из `P580`, если нет `P577`.
+- `movie-lookup.ts` — автозаполнение без AI tokens через Wikipedia/Wikidata; сначала пробует точную страницу, затем search с retry, фильтрует не-media сущности, для сериалов берет год из `P580`, сезоны из `P2437`, общее число серий из `P1113`.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
 - `notifications.ts` — уведомления для фильмов, комментариев и chat messages.
 - `chat.ts` — общий global thread, direct threads только с друзьями, polling data, read counters, replies/images/edit/delete.

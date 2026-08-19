@@ -75,6 +75,27 @@ export function claimDuration(entity: LookupWikidataEntity | null) {
     return Math.round(amount > 500 ? amount / 60 : amount);
 }
 
+function claimQuantity(entity: LookupWikidataEntity | null, prop: string) {
+    const raw = claimValues(entity, prop)[0];
+    if (!(typeof raw === 'object' && raw && 'amount' in raw)) return null;
+    const amount = Number(String(raw.amount).replace(/^\+/, ''));
+    if (!Number.isInteger(amount) || amount <= 0) return null;
+    return amount;
+}
+
+export function claimSeriesInfo(entity: LookupWikidataEntity | null) {
+    const seasonsCount = claimQuantity(entity, 'P2437');
+    const totalEpisodes = claimQuantity(entity, 'P1113');
+    const episodesPerSeason = seasonsCount && totalEpisodes && totalEpisodes % seasonsCount === 0
+        ? Array.from({ length: seasonsCount }, () => totalEpisodes / seasonsCount)
+        : [];
+
+    return {
+        seasonsCount,
+        episodesPerSeason,
+    };
+}
+
 export function isMediaEntity(entity: LookupWikidataEntity | null, text: string) {
     const ids = new Set([
         ...entityIds(entity, 'P31'),

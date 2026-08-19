@@ -67,6 +67,8 @@ function NewMoviePage() {
                 genres: normalizeGenreOptions(movie.genres ?? []),
                 starring: movie.starring?.join(', ') ?? '',
                 durationMin: movie.durationMin ?? '',
+                seasonsCount: movie.seasonsCount ?? '',
+                episodesPerSeason: movie.episodesPerSeason?.join(', ') ?? '',
                 posterUrl: movie.posterUrl ?? '',
             });
             toast.success('Форма заполнена — проверьте данные перед сохранением');
