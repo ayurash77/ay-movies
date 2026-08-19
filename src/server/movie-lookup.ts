@@ -1,7 +1,18 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 
-import { movieKindOptions, type MovieKind } from '@/lib/movie-data';
+import { movieKindOptions } from '@/lib/movie-data';
+import {
+    buildLookupAttempts,
+    claimDuration,
+    claimYear,
+    classifyKind,
+    entityIds,
+    label,
+    isMediaEntity,
+    type LookupLang,
+    type LookupWikidataEntity,
+} from '@/lib/movie-lookup-utils';
 
 const lookupResultSchema = z.object({
     found: z.boolean(),
@@ -35,21 +46,10 @@ type WikiPageResponse = {
     query?: { pages?: Record<string, WikiPage> };
 };
 
-type WikidataEntity = {
-    labels?: Record<string, { value: string }>;
-    claims?: Record<string, Array<{
-        mainsnak?: {
-            datavalue?: {
-                value?: unknown;
-            };
-        };
-    }>>;
-};
-
 async function getJson<T>(url: string): Promise<T | null> {
     try {
         const res = await fetch(url, {
-            signal: AbortSignal.timeout(7000),
+            signal: AbortSignal.timeout(12000),
             headers: { 'user-agent': 'AY Movies/1.0 (movie metadata lookup)' },
         });
         if (!res.ok) return null;
@@ -59,7 +59,7 @@ async function getJson<T>(url: string): Promise<T | null> {
     }
 }
 
-async function searchWiki(lang: 'ru' | 'en', query: string) {
+async function searchWiki(lang: LookupLang, query: string) {
     const params = new URLSearchParams({
         action: 'query',
         list: 'search',
@@ -71,7 +71,7 @@ async function searchWiki(lang: 'ru' | 'en', query: string) {
     return json?.query?.search?.map((item) => item.title) ?? [];
 }
 
-async function loadWikiPage(lang: 'ru' | 'en', title: string): Promise<WikiPage | null> {
+async function loadWikiPage(lang: LookupLang, title: string): Promise<WikiPage | null> {
     const params = new URLSearchParams({
         action: 'query',
         titles: title,
@@ -87,27 +87,11 @@ async function loadWikiPage(lang: 'ru' | 'en', title: string): Promise<WikiPage 
     return Object.values(json?.query?.pages ?? {})[0] ?? null;
 }
 
-async function loadWikidata(id: string): Promise<WikidataEntity | null> {
-    const json = await getJson<{ entities?: Record<string, WikidataEntity> }>(
+async function loadWikidata(id: string): Promise<LookupWikidataEntity | null> {
+    const json = await getJson<{ entities?: Record<string, LookupWikidataEntity> }>(
         `https://www.wikidata.org/wiki/Special:EntityData/${id}.json`,
     );
     return json?.entities?.[id] ?? null;
-}
-
-function label(entity: WikidataEntity | null | undefined) {
-    return entity?.labels?.ru?.value ?? entity?.labels?.en?.value ?? null;
-}
-
-function claimValues(entity: WikidataEntity | null, prop: string): unknown[] {
-    return entity?.claims?.[prop]
-        ?.map((claim) => claim.mainsnak?.datavalue?.value)
-        .filter(Boolean) ?? [];
-}
-
-function entityIds(entity: WikidataEntity | null, prop: string) {
-    return claimValues(entity, prop)
-        .map((value) => typeof value === 'object' && value && 'id' in value ? String(value.id) : null)
-        .filter((value): value is string => Boolean(value));
 }
 
 async function entityLabels(ids: string[], limit = 6) {
@@ -116,45 +100,13 @@ async function entityLabels(ids: string[], limit = 6) {
     return entities.map(label).filter((value): value is string => Boolean(value));
 }
 
-function claimYear(entity: WikidataEntity | null) {
-    const time = claimValues(entity, 'P577')
-        .map((value) => typeof value === 'object' && value && 'time' in value ? String(value.time) : '')
-        .find(Boolean);
-    const year = time?.match(/[+-](\d{4})/)?.[1];
-    return year ? Number(year) : null;
-}
-
-function claimDuration(entity: WikidataEntity | null) {
-    const raw = claimValues(entity, 'P2047')[0];
-    if (!(typeof raw === 'object' && raw && 'amount' in raw)) return null;
-    const amount = Number(String(raw.amount).replace(/^\+/, ''));
-    if (!Number.isFinite(amount)) return null;
-    return Math.round(amount > 500 ? amount / 60 : amount);
-}
-
 function firstSentences(text: string | undefined) {
     const normalized = text?.replace(/\s+/g, ' ').trim();
     if (!normalized) return null;
     return normalized.split(/(?<=[.!?])\s+/).slice(0, 4).join(' ').slice(0, 1200);
 }
 
-function classifyKind(entity: WikidataEntity | null, page: WikiPage, genres: string[]): MovieKind {
-    const ids = new Set([
-        ...entityIds(entity, 'P31'),
-        ...entityIds(entity, 'P136'),
-    ]);
-    const text = `${page.title} ${page.extract ?? ''} ${genres.join(' ')}`.toLowerCase();
-
-    if (ids.has('Q202866') || ids.has('Q581714') || /мульт|анимац|animated/.test(text)) {
-        return 'CARTOON';
-    }
-    if (ids.has('Q5398426') || ids.has('Q7725310') || /сериал|series/.test(text)) {
-        return 'SERIES';
-    }
-    return 'MOVIE';
-}
-
-async function buildMovie(lang: 'ru' | 'en', page: WikiPage): Promise<MovieLookup | null> {
+async function buildMovie(lang: LookupLang, page: WikiPage): Promise<MovieLookup | null> {
     const entity = page.pageprops?.wikibase_item
         ? await loadWikidata(page.pageprops.wikibase_item)
         : null;
@@ -166,6 +118,8 @@ async function buildMovie(lang: 'ru' | 'en', page: WikiPage): Promise<MovieLooku
         entityLabels(entityIds(entity, 'P136'), 4),
         entityLabels(entityIds(entity, 'P161'), 6),
     ]);
+    const mediaText = `${page.title} ${page.extract ?? ''} ${genres.join(' ')}`;
+    if (!isMediaEntity(entity, mediaText)) return null;
 
     const title = entity?.labels?.ru?.value ?? page.title;
     const originalTitle = lang === 'en'
@@ -174,7 +128,7 @@ async function buildMovie(lang: 'ru' | 'en', page: WikiPage): Promise<MovieLooku
 
     return {
         found: true,
-        kind: classifyKind(entity, page, genres),
+        kind: classifyKind(entity, mediaText, genres),
         title,
         originalTitle,
         year: claimYear(entity),
@@ -197,12 +151,15 @@ export const lookupMovie = createServerFn({ method: 'POST' })
             return { ok: false as const, error: 'Требуется авторизация' };
         }
 
-        const attempts: Array<[ 'ru' | 'en', string ]> = [
-            [ 'ru', `${data.title} фильм` ],
-            [ 'ru', data.title ],
-            [ 'en', `${data.title} film` ],
-            [ 'en', data.title ],
-        ];
+        const attempts = buildLookupAttempts(data.title);
+        for (const lang of [ 'ru', 'en' ] as const) {
+            const page = await loadWikiPage(lang, data.title);
+            if (!page) continue;
+            const movie = await buildMovie(lang, page);
+            if (movie?.title && (movie.description || movie.year)) {
+                return { ok: true as const, movie };
+            }
+        }
 
         for (const [ lang, query ] of attempts) {
             const titles = await searchWiki(lang, query);
