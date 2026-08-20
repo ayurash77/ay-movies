@@ -30,6 +30,35 @@ export const movieLookupCandidateSchema = movieLookupSchema.extend({
     confidence: z.number().int().min(0).max(100).nullish(),
 });
 
+export const seriesEpisodeMetadataSchema = z.object({
+    number: z.number().int().positive(),
+    name: z.string().nullish(),
+    originalName: z.string().nullish(),
+    description: z.string().nullish(),
+    originalDescription: z.string().nullish(),
+    airDate: z.string().nullish(),
+    stillUrl: z.string().nullish(),
+});
+
+export const seriesSeasonMetadataSchema = z.object({
+    number: z.number().int().positive(),
+    name: z.string().nullish(),
+    originalName: z.string().nullish(),
+    description: z.string().nullish(),
+    originalDescription: z.string().nullish(),
+    airDate: z.string().nullish(),
+    durationMin: z.number().int().positive().nullish(),
+    posterUrl: z.string().nullish(),
+    episodes: z.array(seriesEpisodeMetadataSchema),
+});
+
+export const movieLookupDetailsSchema = movieLookupCandidateSchema.extend({
+    seasons: z.array(seriesSeasonMetadataSchema),
+});
+
 export type MovieLookup = z.infer<typeof movieLookupSchema>;
 export type LookupProvider = z.infer<typeof lookupProviderSchema>;
 export type MovieLookupCandidate = z.infer<typeof movieLookupCandidateSchema>;
+export type SeriesEpisodeMetadata = z.infer<typeof seriesEpisodeMetadataSchema>;
+export type SeriesSeasonMetadata = z.infer<typeof seriesSeasonMetadataSchema>;
+export type MovieLookupDetails = z.infer<typeof movieLookupDetailsSchema>;

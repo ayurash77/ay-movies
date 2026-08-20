@@ -1,4 +1,5 @@
 import type { GenreOption } from './genre-groups';
+import type { LookupProvider, SeriesSeasonMetadata } from './movie-lookup-types';
 
 export const movieSortOptions = [ 'new', 'rating', 'year', 'title' ] as const;
 export type MovieSort = (typeof movieSortOptions)[number];
@@ -58,6 +59,10 @@ export type MovieDetails = {
     durationMin: number | null;
     seasonsCount: number | null;
     episodesPerSeason: number[];
+    metadataProvider: LookupProvider | null;
+    metadataExternalId: string | null;
+    metadataUpdatedAt: string | null;
+    seriesSeasons: SeriesSeasonMetadata[];
     createdAt: string;
     addedBy: string | null;
     avgRating: number;
@@ -82,4 +87,8 @@ export type MovieFormFields = {
     durationMin?: number | '';
     seasonsCount?: number | '';
     episodesPerSeason?: string;
+    metadataProvider?: LookupProvider | null;
+    metadataExternalId?: string | null;
+    metadataUpdatedAt?: string | null;
+    seriesSeasons?: SeriesSeasonMetadata[];
 };

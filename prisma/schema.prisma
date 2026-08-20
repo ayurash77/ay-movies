@@ -67,33 +67,72 @@ model UserFollow {
 }
 
 model Movie {
-  id                String         @id @default(cuid())
-  kind              MovieKind      @default(MOVIE)
-  dedupeKey         String?        @unique
-  title             String
-  year              Int
-  country           String
-  description       String
-  posterUrl         String?
-  trailerUrls       String[]       @default([])
-  watchLinks        String[]       @default([])
-  director          String?
-  genres            String[]
-  durationMin       Int?
-  seasonsCount      Int?
-  episodesPerSeason Int[]
-  starring          String[]
-  createdById       String?
-  createdBy         User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt         DateTime       @default(now())
-  ratings           Rating[]
-  comments          Comment[]
-  watchEntries      WatchEntry[]
-  notifications     Notification[]
+  id                 String         @id @default(cuid())
+  kind               MovieKind      @default(MOVIE)
+  dedupeKey          String?        @unique
+  title              String
+  year               Int
+  country            String
+  description        String
+  posterUrl          String?
+  trailerUrls        String[]       @default([])
+  watchLinks         String[]       @default([])
+  director           String?
+  genres             String[]
+  durationMin        Int?
+  seasonsCount       Int?
+  episodesPerSeason  Int[]
+  starring           String[]
+  metadataProvider   String?
+  metadataExternalId String?
+  metadataUpdatedAt  DateTime?
+  createdById        String?
+  createdBy          User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime       @default(now())
+  ratings            Rating[]
+  comments           Comment[]
+  watchEntries       WatchEntry[]
+  notifications      Notification[]
+  seriesSeasons      SeriesSeason[]
 
   @@index([createdAt])
   @@index([kind, createdAt])
   @@index([kind, year])
+  @@index([metadataProvider, metadataExternalId])
+}
+
+model SeriesSeason {
+  id                  String          @id @default(cuid())
+  movieId             String
+  movie               Movie           @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  number              Int
+  name                String?
+  originalName        String?
+  description         String?
+  originalDescription String?
+  airDate             DateTime?       @db.Date
+  durationMin         Int?
+  posterUrl           String?
+  episodes            SeriesEpisode[]
+
+  @@unique([movieId, number])
+  @@index([movieId, number])
+}
+
+model SeriesEpisode {
+  id                  String       @id @default(cuid())
+  seasonId            String
+  season              SeriesSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  number              Int
+  name                String?
+  originalName        String?
+  description         String?
+  originalDescription String?
+  airDate             DateTime?    @db.Date
+  stillUrl            String?
+
+  @@unique([seasonId, number])
+  @@index([seasonId, number])
 }
 
 model Notification {
