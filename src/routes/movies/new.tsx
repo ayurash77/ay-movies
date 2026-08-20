@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { PageTitle } from '@/components/AppTitle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { LookupCandidates } from '@/components/movies/LookupCandidates';
 import { MovieForm } from '@/components/movies/MovieForm';
-import { lookupMovie } from '@/server/movie-lookup';
+import { lookupMovieCandidates, type MovieLookupCandidate } from '@/server/movie-lookup';
 import { createMovie } from '@/server/movies';
 import { normalizeGenreOptions } from '@/lib/genre-groups';
 import { movieKindOptions, type MovieFormFields } from '@/lib/movie-data';
@@ -33,12 +34,33 @@ export const Route = createFileRoute('/movies/new')({
     component: NewMoviePage,
 });
 
+function candidateToFormDefaults(
+    candidate: MovieLookupCandidate,
+    fallbackTitle: string,
+): Partial<MovieFormFields> {
+    return {
+        kind: candidate.kind ?? 'MOVIE',
+        title: candidate.title ?? fallbackTitle,
+        year: candidate.year ?? new Date().getFullYear(),
+        country: candidate.country ?? '',
+        description: candidate.description ?? '',
+        director: candidate.director ?? '',
+        genres: normalizeGenreOptions(candidate.genres ?? []),
+        starring: candidate.starring?.join(', ') ?? '',
+        durationMin: candidate.durationMin ?? '',
+        seasonsCount: candidate.seasonsCount ?? '',
+        episodesPerSeason: candidate.episodesPerSeason?.join(', ') ?? '',
+        posterUrl: candidate.posterUrl ?? '',
+    };
+}
+
 function NewMoviePage() {
     const navigate = useNavigate();
     const { kind } = Route.useSearch();
     const [ lookupTitle, setLookupTitle ] = useState('');
     const [ isLookingUp, setIsLookingUp ] = useState(false);
     const [ lookupDefaults, setLookupDefaults ] = useState<Partial<MovieFormFields>>({ kind: kind ?? 'MOVIE' });
+    const [ lookupCandidates, setLookupCandidates ] = useState<MovieLookupCandidate[]>([]);
 
     useEffect(() => {
         setLookupDefaults((current) => ({ ...current, kind: kind ?? current.kind ?? 'MOVIE' }));
@@ -50,28 +72,14 @@ function NewMoviePage() {
 
         setIsLookingUp(true);
         try {
-            const result = await lookupMovie({ data: { title } });
+            const result = await lookupMovieCandidates({ data: { title, kind } });
             if (!result.ok) {
                 toast.error(result.error);
+                setLookupCandidates([]);
                 return;
             }
 
-            const movie = result.movie;
-            setLookupDefaults({
-                kind: movie.kind ?? 'MOVIE',
-                title: movie.title ?? title,
-                year: movie.year ?? new Date().getFullYear(),
-                country: movie.country ?? '',
-                description: movie.description ?? '',
-                director: movie.director ?? '',
-                genres: normalizeGenreOptions(movie.genres ?? []),
-                starring: movie.starring?.join(', ') ?? '',
-                durationMin: movie.durationMin ?? '',
-                seasonsCount: movie.seasonsCount ?? '',
-                episodesPerSeason: movie.episodesPerSeason?.join(', ') ?? '',
-                posterUrl: movie.posterUrl ?? '',
-            });
-            toast.success('Форма заполнена — проверьте данные перед сохранением');
+            setLookupCandidates(result.candidates);
         } catch {
             toast.error('Не удалось получить данные');
         } finally {
@@ -89,7 +97,7 @@ function NewMoviePage() {
                         Быстрое заполнение
                     </CardTitle>
                     <CardDescription>
-                        Введите название — приложение найдёт данные в открытых источниках и заполнит форму. Проверьте результат перед сохранением.
+                        Введите название — приложение покажет найденные варианты. Выберите подходящий источник, чтобы заполнить форму.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -108,11 +116,21 @@ function NewMoviePage() {
                             aria-label="Название для поиска"
                         />
                         <Button type="submit" disabled={isLookingUp || lookupTitle.trim().length < 2}>
-                            {isLookingUp ? 'Ищем…' : 'Заполнить'}
+                            {isLookingUp ? 'Ищем…' : 'Найти'}
                         </Button>
                     </form>
                 </CardContent>
             </Card>
+
+            <LookupCandidates
+                candidates={lookupCandidates}
+                onReject={() => setLookupCandidates([])}
+                onSelect={(candidate) => {
+                    setLookupDefaults(candidateToFormDefaults(candidate, lookupTitle.trim()));
+                    setLookupCandidates([]);
+                    toast.success('Данные подставлены — проверьте перед сохранением');
+                }}
+            />
 
             <Card>
                 <CardContent>

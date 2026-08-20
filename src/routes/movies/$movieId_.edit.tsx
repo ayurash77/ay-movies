@@ -5,10 +5,11 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { PageTitle } from '@/components/AppTitle';
+import { LookupCandidates } from '@/components/movies/LookupCandidates';
 import { MovieForm } from '@/components/movies/MovieForm';
 import type { MovieFormFields } from '@/lib/movie-data';
 import { getMovie, updateMovie } from '@/server/movies';
-import { lookupMovie, type MovieLookup } from '@/server/movie-lookup';
+import { lookupMovieCandidates, type MovieLookupCandidate } from '@/server/movie-lookup';
 import { normalizeGenreOptions } from '@/lib/genre-groups';
 
 function movieToFormDefaults(movie: Awaited<ReturnType<typeof getMovie>>): Partial<MovieFormFields> {
@@ -33,7 +34,7 @@ function movieToFormDefaults(movie: Awaited<ReturnType<typeof getMovie>>): Parti
 
 function mergeLookupDefaults(
     current: Partial<MovieFormFields>,
-    lookup: MovieLookup,
+    lookup: MovieLookupCandidate,
 ): Partial<MovieFormFields> {
     return {
         ...current,
@@ -42,7 +43,9 @@ function mergeLookupDefaults(
         year: lookup.year ?? current.year,
         country: lookup.country ?? current.country,
         description: lookup.description ?? current.description,
-        posterUrl: lookup.posterUrl ?? current.posterUrl,
+        posterUrl: current.posterUrl || lookup.posterUrl || '',
+        trailerUrls: current.trailerUrls,
+        watchLinks: current.watchLinks,
         director: lookup.director ?? current.director,
         genres: lookup.genres?.length ? normalizeGenreOptions(lookup.genres) : current.genres,
         starring: lookup.starring?.length ? lookup.starring.join(', ') : current.starring,
@@ -78,6 +81,7 @@ function EditMoviePage() {
     const [ formDefaults, setFormDefaults ] = useState<Partial<MovieFormFields>>(() => movieToFormDefaults(movie));
     const [ formVersion, setFormVersion ] = useState(0);
     const [ isRefreshing, setIsRefreshing ] = useState(false);
+    const [ lookupCandidates, setLookupCandidates ] = useState<MovieLookupCandidate[]>([]);
 
     const handleRefreshMetadata = async () => {
         const title = String(formDefaults.title || movie.title).trim();
@@ -85,14 +89,13 @@ function EditMoviePage() {
 
         setIsRefreshing(true);
         try {
-            const result = await lookupMovie({ data: { title } });
+            const result = await lookupMovieCandidates({ data: { title, kind: formDefaults.kind } });
             if (!result.ok) {
                 toast.error(result.error);
+                setLookupCandidates([]);
                 return;
             }
-            setFormDefaults((current) => mergeLookupDefaults(current, result.movie));
-            setFormVersion((current) => current + 1);
-            toast.success('Данные обновлены');
+            setLookupCandidates(result.candidates);
         } catch {
             toast.error('Не удалось обновить данные');
         } finally {
@@ -133,6 +136,16 @@ function EditMoviePage() {
                         {isRefreshing ? 'Обновление…' : 'Обновить данные'}
                     </Button>
                 </div>
+                <LookupCandidates
+                    candidates={lookupCandidates}
+                    onReject={() => setLookupCandidates([])}
+                    onSelect={(candidate) => {
+                        setFormDefaults((current) => mergeLookupDefaults(current, candidate));
+                        setLookupCandidates([]);
+                        setFormVersion((current) => current + 1);
+                        toast.success('Данные подставлены — проверьте перед сохранением');
+                    }}
+                />
                 <MovieForm
                     key={formVersion}
                     submitLabel="Сохранить"

@@ -30,7 +30,7 @@ test('movie edit page is unframed and can refresh metadata', () => {
     const edit = read('src/routes/movies/$movieId_.edit.tsx');
 
     assert.doesNotMatch(edit, /Card/);
-    assert.match(edit, /lookupMovie/);
+    assert.match(edit, /lookupMovieCandidates/);
     assert.match(edit, /Обновить данные/);
     assert.match(edit, /mergeLookupDefaults/);
     assert.match(edit, /formVersion/);
