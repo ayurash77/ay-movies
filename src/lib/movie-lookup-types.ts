@@ -6,6 +6,7 @@ import { movieKindOptions } from './movie-data';
 export const SERIES_METADATA_LIMITS = {
     maxSeasons: 100,
     maxSeasonNumber: 1000,
+    maxSeasonDurationMin: 100000,
     maxEpisodesPerSeason: 1000,
     maxTotalEpisodes: 5000,
     maxEpisodeNumber: 10000,
@@ -85,7 +86,7 @@ export const seriesSeasonMetadataSchema = z.object({
     description: nullableDescriptionSchema,
     originalDescription: nullableDescriptionSchema,
     airDate: nullableAirDateSchema,
-    durationMin: z.number().int().positive().nullish(),
+    durationMin: z.number().int().min(1).max(SERIES_METADATA_LIMITS.maxSeasonDurationMin).nullish(),
     posterUrl: nullableHttpUrlSchema,
     episodes: z.array(seriesEpisodeMetadataSchema).max(SERIES_METADATA_LIMITS.maxEpisodesPerSeason),
 });

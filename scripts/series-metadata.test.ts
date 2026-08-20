@@ -171,6 +171,11 @@ test('validates detailed snapshot limits at the shared boundary', () => {
     };
 
     assert.doesNotThrow(() => seriesMetadataSnapshotSchema.parse([ season ]));
+    assert.doesNotThrow(() => seriesMetadataSnapshotSchema.parse([ {
+        number: 1,
+        durationMin: 100000,
+        episodes: [ { number: 1 } ],
+    } ]));
     assert.doesNotThrow(() => seriesMetadataSnapshotSchema.parse(Array.from(
         { length: 5 },
         (_, seasonIndex) => ({
@@ -211,5 +216,15 @@ test('validates detailed snapshot limits at the shared boundary', () => {
     assert.throws(() => seriesMetadataSnapshotSchema.parse([ {
         number: SERIES_METADATA_LIMITS.maxSeasonNumber + 1,
         episodes: [ { number: SERIES_METADATA_LIMITS.maxEpisodeNumber + 1 } ],
+    } ]));
+    assert.throws(() => seriesMetadataSnapshotSchema.parse([ {
+        number: 1,
+        durationMin: 100001,
+        episodes: [ { number: 1 } ],
+    } ]));
+    assert.throws(() => seriesMetadataSnapshotSchema.parse([ {
+        number: 1,
+        durationMin: 2_147_483_648,
+        episodes: [ { number: 1 } ],
     } ]));
 });
