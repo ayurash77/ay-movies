@@ -54,6 +54,10 @@ test('series detail page has compact about and seasons tabs', () => {
     assert.match(seasons, /Серия \$\{number\}/);
     assert.doesNotMatch(seasons, /key=\{season\.number\}/);
     assert.doesNotMatch(seasons, /key=\{episode\.number\}/);
+    assert.doesNotMatch(seasons, /activeSeasonNumber/);
+    assert.doesNotMatch(seasons, /season\.number === activeSeason/);
+    assert.match(seasons, /activeSeasonId/);
+    assert.match(seasons, /season\.id === activeSeasonId/);
 });
 
 test('app header relies on backdrop instead of a bottom border line', () => {

@@ -6,6 +6,7 @@ import type { SeriesEpisodeMetadata } from '@/lib/series-metadata';
 import { cn } from '@/lib/utils';
 
 type SeasonEpisodes = {
+    id: string;
     number: number;
     episodes: SeriesEpisodeMetadata[];
 };
@@ -32,6 +33,7 @@ function legacySeasons(movie: Pick<MovieDetails, 'seasonsCount' | 'episodesPerSe
         const episodeCount = movie.episodesPerSeason[seasonIndex] ?? 0;
 
         return {
+            id: `season-${number}-${seasonIndex}`,
             number,
             episodes: Array.from({ length: episodeCount }, (_, episodeIndex) => ({
                 number: episodeIndex + 1,
@@ -84,16 +86,20 @@ function EpisodeRow({ episode, seriesTitle }: { episode: SeriesEpisodeMetadata; 
 export function SeriesSeasons({ movie }: { movie: MovieDetails }) {
     const seasons = useMemo<SeasonEpisodes[]>(() => (
         movie.seriesSeasons.length > 0
-            ? movie.seriesSeasons.map((season) => ({ number: season.number, episodes: season.episodes }))
+            ? movie.seriesSeasons.map((season, seasonIndex) => ({
+                id: `season-${season.number}-${seasonIndex}`,
+                number: season.number,
+                episodes: season.episodes,
+            }))
             : legacySeasons(movie)
     ), [ movie ]);
-    const [ activeSeasonNumber, setActiveSeasonNumber ] = useState(seasons[0]?.number ?? 1);
-    const activeSeason = seasons.find((season) => season.number === activeSeasonNumber) ?? seasons[0];
+    const [ activeSeasonId, setActiveSeasonId ] = useState(seasons[0]?.id ?? '');
+    const activeSeason = seasons.find((season) => season.id === activeSeasonId) ?? seasons[0];
 
     useEffect(() => {
-        if (seasons.some((season) => season.number === activeSeasonNumber)) return;
-        setActiveSeasonNumber(seasons[0]?.number ?? 1);
-    }, [ activeSeasonNumber, seasons ]);
+        if (seasons.some((season) => season.id === activeSeasonId)) return;
+        setActiveSeasonId(seasons[0]?.id ?? '');
+    }, [ activeSeasonId, seasons ]);
 
     if (!activeSeason) {
         return (
@@ -109,18 +115,18 @@ export function SeriesSeasons({ movie }: { movie: MovieDetails }) {
                 className="flex gap-2 overflow-x-auto pb-1"
                 aria-label="Выбор сезона"
             >
-                {seasons.map((season, seasonIndex) => {
-                    const isActive = season.number === activeSeason.number;
+                {seasons.map((season) => {
+                    const isActive = season.id === activeSeason.id;
 
                     return (
                         <Button
-                            key={`season-${season.number}-${seasonIndex}`}
+                            key={season.id}
                             type="button"
                             variant={isActive ? 'default' : 'ghost'}
                             className="size-10 shrink-0 p-0"
                             aria-label={`Сезон ${season.number}`}
                             aria-pressed={isActive}
-                            onClick={() => setActiveSeasonNumber(season.number)}
+                            onClick={() => setActiveSeasonId(season.id)}
                         >
                             {season.number}
                         </Button>
@@ -136,7 +142,7 @@ export function SeriesSeasons({ movie }: { movie: MovieDetails }) {
                     <ol className="flex min-w-0 flex-col gap-5">
                         {activeSeason.episodes.map((episode, episodeIndex) => (
                             <EpisodeRow
-                                key={`episode-${activeSeason.number}-${episode.number}-${episodeIndex}`}
+                                key={`episode-${activeSeason.id}-${episode.number}-${episodeIndex}`}
                                 episode={episode}
                                 seriesTitle={movie.title}
                             />
