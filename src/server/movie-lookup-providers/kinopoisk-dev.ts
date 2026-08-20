@@ -1,5 +1,11 @@
 import type { MovieKind } from '@/lib/movie-data';
-import type { MovieLookupCandidate } from '@/lib/movie-lookup-types';
+import {
+    movieLookupDetailsSchema,
+    type MovieLookupCandidate,
+    type MovieLookupDetails,
+    type SeriesSeasonMetadata,
+} from '@/lib/movie-lookup-types';
+import { normalizeSeriesMetadata, seriesMetadataSummary } from '@/lib/series-metadata';
 
 type KinopoiskName = { name?: string | null };
 type KinopoiskPerson = {
@@ -26,13 +32,31 @@ export type KinopoiskMovie = {
     persons?: KinopoiskPerson[] | null;
 };
 
+type KinopoiskImage = { url?: string | null };
+type KinopoiskEpisode = {
+    number?: number | null;
+    name?: string | null;
+    enName?: string | null;
+    description?: string | null;
+    enDescription?: string | null;
+    airDate?: string | null;
+    still?: KinopoiskImage | null;
+};
+export type KinopoiskSeason = {
+    number?: number | null;
+    name?: string | null;
+    enName?: string | null;
+    description?: string | null;
+    enDescription?: string | null;
+    airDate?: string | null;
+    duration?: number | null;
+    poster?: KinopoiskImage | null;
+    episodes?: KinopoiskEpisode[] | null;
+};
+
 type KinopoiskSearchResponse = { docs?: KinopoiskMovie[] };
 type KinopoiskSeasonResponse = {
-    docs?: Array<{
-        number?: number | null;
-        episodes?: unknown[] | null;
-        episodesCount?: number | null;
-    }>;
+    docs?: KinopoiskSeason[];
 };
 
 const DEFAULT_BASE_URL = 'https://api.kinopoisk.dev';
@@ -120,6 +144,28 @@ export function mapKinopoiskMovie(
     };
 }
 
+export function mapKinopoiskSeasons(input: KinopoiskSeason[]): SeriesSeasonMetadata[] {
+    return normalizeSeriesMetadata(input.map((season) => ({
+        number: season.number ?? 0,
+        name: season.name ?? null,
+        originalName: season.enName ?? null,
+        description: season.description ?? null,
+        originalDescription: season.enDescription ?? null,
+        airDate: season.airDate ?? null,
+        durationMin: season.duration ?? null,
+        posterUrl: season.poster?.url ?? null,
+        episodes: (season.episodes ?? []).map((episode) => ({
+            number: episode.number ?? 0,
+            name: episode.name ?? null,
+            originalName: episode.enName ?? null,
+            description: episode.description ?? null,
+            originalDescription: episode.enDescription ?? null,
+            airDate: episode.airDate ?? null,
+            stillUrl: episode.still?.url ?? null,
+        })),
+    })));
+}
+
 function getKinopoiskConfig() {
     const token = process.env.KINOPOISK_DEV_TOKEN?.trim();
     if (!token) return null;
@@ -129,12 +175,13 @@ function getKinopoiskConfig() {
     };
 }
 
-async function kinopoiskJson<T>(path: string, params: URLSearchParams): Promise<T | null> {
+async function kinopoiskJson<T>(path: string, params?: URLSearchParams): Promise<T | null> {
     const config = getKinopoiskConfig();
     if (!config) return null;
 
     try {
-        const res = await fetch(`${config.baseUrl}${path}?${params}`, {
+        const query = params?.size ? `?${params}` : '';
+        const res = await fetch(`${config.baseUrl}${path}${query}`, {
             signal: AbortSignal.timeout(15000),
             headers: {
                 accept: 'application/json',
@@ -148,18 +195,15 @@ async function kinopoiskJson<T>(path: string, params: URLSearchParams): Promise<
     }
 }
 
-async function loadEpisodesPerSeason(movieId: string) {
+async function loadKinopoiskSeasons(movieId: string) {
     const params = new URLSearchParams({
         movieId,
-        limit: '50',
+        limit: '250',
         sortField: 'number',
         sortType: '1',
     });
     const json = await kinopoiskJson<KinopoiskSeasonResponse>('/v1.4/season', params);
-    return (json?.docs ?? [])
-        .sort((a, b) => (a.number ?? 0) - (b.number ?? 0))
-        .map((season) => season.episodesCount ?? season.episodes?.length ?? 0)
-        .filter((count) => count > 0);
+    return json?.docs ?? [];
 }
 
 export async function lookupKinopoiskCandidates(title: string, kind?: MovieKind): Promise<MovieLookupCandidate[]> {
@@ -169,20 +213,29 @@ export async function lookupKinopoiskCandidates(title: string, kind?: MovieKind)
     });
     const json = await kinopoiskJson<KinopoiskSearchResponse>('/v1.4/movie/search', params);
     const docs = json?.docs ?? [];
-    const candidates: MovieLookupCandidate[] = [];
+    return docs
+        .map((doc) => mapKinopoiskMovie(doc))
+        .filter((candidate): candidate is MovieLookupCandidate => Boolean(candidate))
+        .filter((candidate) => !kind || candidate.kind === kind);
+}
 
-    for (const doc of docs) {
-        const id = doc.id == null ? '' : String(doc.id);
-        const baseCandidate = mapKinopoiskMovie(doc);
-        if (!baseCandidate) continue;
-        if (kind && baseCandidate.kind !== kind) continue;
+export async function loadKinopoiskCandidate(externalId: string): Promise<MovieLookupDetails | null> {
+    const movieId = externalId.trim();
+    if (!movieId) return null;
 
-        const episodesPerSeason = baseCandidate.kind === 'SERIES' && id
-            ? await loadEpisodesPerSeason(id)
-            : [];
-        const candidate = mapKinopoiskMovie(doc, episodesPerSeason);
-        if (candidate) candidates.push(candidate);
-    }
+    const [ movie, rawSeasons ] = await Promise.all([
+        kinopoiskJson<KinopoiskMovie>(`/v1.4/movie/${encodeURIComponent(movieId)}`),
+        loadKinopoiskSeasons(movieId),
+    ]);
+    if (!movie) return null;
 
-    return candidates;
+    const seasons = mapKinopoiskSeasons(rawSeasons);
+    const candidate = mapKinopoiskMovie(movie, seriesMetadataSummary(seasons).episodesPerSeason);
+    if (!candidate) return null;
+
+    return movieLookupDetailsSchema.parse({
+        ...candidate,
+        ...seriesMetadataSummary(seasons),
+        seasons,
+    });
 }

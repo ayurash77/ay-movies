@@ -6,8 +6,14 @@ import {
     movieLookupCandidateSchema,
     type MovieLookupCandidate,
 } from '../src/lib/movie-lookup-types';
-import { mapKinopoiskMovie } from '../src/server/movie-lookup-providers/kinopoisk-dev';
-import { mapKinopoiskUnofficialMovie } from '../src/server/movie-lookup-providers/kinopoisk-unofficial';
+import {
+    mapKinopoiskMovie,
+    mapKinopoiskSeasons,
+} from '../src/server/movie-lookup-providers/kinopoisk-dev';
+import {
+    mapKinopoiskUnofficialMovie,
+    mapKinopoiskUnofficialSeasons,
+} from '../src/server/movie-lookup-providers/kinopoisk-unofficial';
 import {
     buildLookupAttempts,
     claimSeriesInfo,
@@ -131,6 +137,54 @@ test('kinopoisk mapper detects cartoons from type and genres', () => {
     assert.equal(candidate?.kind, 'CARTOON');
 });
 
+test('kinopoisk detailed season mapper preserves localized episode metadata', () => {
+    assert.deepEqual(mapKinopoiskSeasons([
+        {
+            number: 1,
+            name: 'Первый сезон',
+            enName: 'Season One',
+            episodes: [ {
+                number: 1,
+                name: 'Недотепство заразно',
+                enName: "Failure's Contagious",
+                description: 'Ривер прибывает в Слау-Хаус.',
+                airDate: '2022-04-01',
+                still: { url: 'https://example.com/episode.jpg' },
+            } ],
+        },
+    ]), [ {
+        number: 1,
+        name: 'Первый сезон',
+        originalName: 'Season One',
+        description: null,
+        originalDescription: null,
+        airDate: null,
+        durationMin: null,
+        posterUrl: null,
+        episodes: [ {
+            number: 1,
+            name: 'Недотепство заразно',
+            originalName: "Failure's Contagious",
+            description: 'Ривер прибывает в Слау-Хаус.',
+            originalDescription: null,
+            airDate: '2022-04-01',
+            stillUrl: 'https://example.com/episode.jpg',
+        } ],
+    } ]);
+});
+
+test('kinopoisk detailed season mapper orders episodes by number', () => {
+    const seasons = mapKinopoiskSeasons([ {
+        number: 1,
+        episodes: [
+            { number: 2, name: 'Вторая серия' },
+            { number: 1, name: 'Первая серия' },
+        ],
+    } ]);
+
+    assert.deepEqual(seasons[0]?.episodes.map((episode) => episode.number), [ 1, 2 ]);
+});
+
 test('kinopoisk unofficial mapper normalizes detailed series metadata', () => {
     const candidate = mapKinopoiskUnofficialMovie({
         kinopoiskId: 464963,
@@ -175,6 +229,85 @@ test('kinopoisk unofficial mapper detects cartoons from genres', () => {
     });
 
     assert.equal(candidate?.kind, 'CARTOON');
+});
+
+test('kinopoisk unofficial detailed season mapper preserves episode metadata', () => {
+    assert.deepEqual(mapKinopoiskUnofficialSeasons([
+        {
+            number: 2,
+            episodes: [ {
+                seasonNumber: 2,
+                episodeNumber: 3,
+                nameRu: 'Новая серия',
+                nameEn: 'A New Episode',
+                synopsis: 'События принимают неожиданный оборот.',
+                releaseDate: '2023-05-17',
+            } ],
+        },
+    ]), [ {
+        number: 2,
+        name: null,
+        originalName: null,
+        description: null,
+        originalDescription: null,
+        airDate: null,
+        durationMin: null,
+        posterUrl: null,
+        episodes: [ {
+            number: 3,
+            name: 'Новая серия',
+            originalName: 'A New Episode',
+            description: 'События принимают неожиданный оборот.',
+            originalDescription: null,
+            airDate: '2023-05-17',
+            stillUrl: null,
+        } ],
+    } ]);
+});
+
+test('kinopoisk unofficial detailed season mapper orders episodes by number', () => {
+    const seasons = mapKinopoiskUnofficialSeasons([ {
+        number: 1,
+        episodes: [
+            { seasonNumber: 1, episodeNumber: 2, nameRu: 'Вторая серия' },
+            { seasonNumber: 1, episodeNumber: 1, nameRu: 'Первая серия' },
+        ],
+    } ]);
+
+    assert.deepEqual(seasons[0]?.episodes.map((episode) => episode.number), [ 1, 2 ]);
+});
+
+test('movie lookup exports authenticated detail loading with validated provider and external id', () => {
+    const source = readFileSync('src/server/movie-lookup.ts', 'utf8');
+
+    assert.match(source, /lookupDetailsInputSchema/);
+    assert.match(source, /provider:\s*lookupProviderSchema/);
+    assert.match(source, /externalId:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.max\(100\)/);
+    assert.match(source, /loadMovieLookupDetails\s*=\s*createServerFn/);
+    assert.match(source, /data\.provider === 'wikidata'/);
+    const detailsHandler = source.slice(source.indexOf('export const loadMovieLookupDetails'));
+    assert.ok(
+        detailsHandler.indexOf("data.provider === 'wikidata'")
+            < detailsHandler.indexOf("import('./movie-lookup-providers/kinopoisk-dev')"),
+    );
+    assert.match(source, /\[ loadKinopoiskUnofficialCandidate, loadKinopoiskCandidate \]/);
+    assert.match(source, /\[ loadKinopoiskCandidate, loadKinopoiskUnofficialCandidate \]/);
+});
+
+test('provider searches do not load details for every candidate', () => {
+    const kinopoiskSource = readFileSync('src/server/movie-lookup-providers/kinopoisk-dev.ts', 'utf8');
+    const unofficialSource = readFileSync('src/server/movie-lookup-providers/kinopoisk-unofficial.ts', 'utf8');
+    const kinopoiskSearch = kinopoiskSource.slice(
+        kinopoiskSource.indexOf('export async function lookupKinopoiskCandidates'),
+        kinopoiskSource.indexOf('export async function loadKinopoiskCandidate'),
+    );
+    const unofficialSearch = unofficialSource.slice(
+        unofficialSource.indexOf('export async function lookupKinopoiskUnofficialCandidates'),
+        unofficialSource.indexOf('export async function loadKinopoiskUnofficialCandidate'),
+    );
+
+    assert.doesNotMatch(kinopoiskSearch, /loadKinopoiskSeasons/);
+    assert.doesNotMatch(unofficialSearch, /loadMovie|loadStaff|loadEpisodesPerSeason/);
 });
 
 test('movie lookup tries exact title before film suffix and includes series suffixes', () => {

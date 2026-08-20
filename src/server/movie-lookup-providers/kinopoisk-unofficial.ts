@@ -1,5 +1,11 @@
 import type { MovieKind } from '@/lib/movie-data';
-import type { MovieLookupCandidate } from '@/lib/movie-lookup-types';
+import {
+    movieLookupDetailsSchema,
+    type MovieLookupCandidate,
+    type MovieLookupDetails,
+    type SeriesSeasonMetadata,
+} from '@/lib/movie-lookup-types';
+import { normalizeSeriesMetadata, seriesMetadataSummary } from '@/lib/series-metadata';
 
 type NameValue = { country?: string | null; genre?: string | null };
 
@@ -33,11 +39,20 @@ export type KinopoiskUnofficialStaff = {
 };
 
 type SearchResponse = { films?: KinopoiskUnofficialMovie[] };
+type KinopoiskUnofficialEpisode = {
+    seasonNumber?: number | null;
+    episodeNumber?: number | null;
+    nameRu?: string | null;
+    nameEn?: string | null;
+    synopsis?: string | null;
+    releaseDate?: string | null;
+};
+export type UnofficialSeason = {
+    number?: number | null;
+    episodes?: KinopoiskUnofficialEpisode[] | null;
+};
 type SeasonResponse = {
-    items?: Array<{
-        number?: number | null;
-        episodes?: unknown[] | null;
-    }>;
+    items?: UnofficialSeason[];
 };
 
 const DEFAULT_BASE_URL = 'https://kinopoiskapiunofficial.tech';
@@ -143,6 +158,28 @@ export function mapKinopoiskUnofficialMovie(
     };
 }
 
+export function mapKinopoiskUnofficialSeasons(input: UnofficialSeason[]): SeriesSeasonMetadata[] {
+    return normalizeSeriesMetadata(input.map((season) => ({
+        number: season.number ?? season.episodes?.[0]?.seasonNumber ?? 0,
+        name: null,
+        originalName: null,
+        description: null,
+        originalDescription: null,
+        airDate: null,
+        durationMin: null,
+        posterUrl: null,
+        episodes: (season.episodes ?? []).map((episode) => ({
+            number: episode.episodeNumber ?? 0,
+            name: episode.nameRu ?? null,
+            originalName: episode.nameEn ?? null,
+            description: episode.synopsis ?? null,
+            originalDescription: null,
+            airDate: episode.releaseDate ?? null,
+            stillUrl: null,
+        })),
+    })));
+}
+
 function getConfig() {
     const token = process.env.KINOPOISK_UNOFFICIAL_TOKEN?.trim();
     if (!token) return null;
@@ -182,10 +219,7 @@ async function loadStaff(id: string) {
 
 async function loadEpisodesPerSeason(id: string) {
     const json = await getJson<SeasonResponse>(`/api/v2.2/films/${id}/seasons`);
-    return (json?.items ?? [])
-        .sort((a, b) => (a.number ?? 0) - (b.number ?? 0))
-        .map((season) => season.episodes?.length ?? 0)
-        .filter((count) => count > 0);
+    return json?.items ?? [];
 }
 
 export async function lookupKinopoiskUnofficialCandidates(
@@ -197,22 +231,30 @@ export async function lookupKinopoiskUnofficialCandidates(
         new URLSearchParams({ keyword: title, page: '1' }),
     );
     const films = search?.films ?? [];
-    const candidates: MovieLookupCandidate[] = [];
+    return films.slice(0, 8)
+        .map((film) => mapKinopoiskUnofficialMovie(film))
+        .filter((candidate): candidate is MovieLookupCandidate => Boolean(candidate))
+        .filter((candidate) => !kind || candidate.kind === kind);
+}
 
-    for (const film of films.slice(0, 8)) {
-        const id = movieId(film);
-        const detailed = id ? await loadMovie(id) : null;
-        const base = mapKinopoiskUnofficialMovie(detailed ?? film);
-        if (!base) continue;
-        if (kind && base.kind !== kind) continue;
+export async function loadKinopoiskUnofficialCandidate(externalId: string): Promise<MovieLookupDetails | null> {
+    const id = externalId.trim();
+    if (!id) return null;
 
-        const [ staff, episodesPerSeason ] = await Promise.all([
-            id ? loadStaff(id) : Promise.resolve([]),
-            base.kind === 'SERIES' && id ? loadEpisodesPerSeason(id) : Promise.resolve([]),
-        ]);
-        const candidate = mapKinopoiskUnofficialMovie(detailed ?? film, staff ?? [], episodesPerSeason);
-        if (candidate) candidates.push(candidate);
-    }
+    const [ movie, staff, rawSeasons ] = await Promise.all([
+        loadMovie(id),
+        loadStaff(id),
+        loadEpisodesPerSeason(id),
+    ]);
+    if (!movie) return null;
 
-    return candidates;
+    const seasons = mapKinopoiskUnofficialSeasons(rawSeasons);
+    const candidate = mapKinopoiskUnofficialMovie(movie, staff ?? [], seriesMetadataSummary(seasons).episodesPerSeason);
+    if (!candidate) return null;
+
+    return movieLookupDetailsSchema.parse({
+        ...candidate,
+        ...seriesMetadataSummary(seasons),
+        seasons,
+    });
 }

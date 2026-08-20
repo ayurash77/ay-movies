@@ -2,13 +2,22 @@ import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 
 import { movieKindOptions } from '@/lib/movie-data';
-import { movieLookupCandidateSchema, type MovieLookupCandidate } from '@/lib/movie-lookup-types';
+import {
+    lookupProviderSchema,
+    movieLookupCandidateSchema,
+    type MovieLookupCandidate,
+} from '@/lib/movie-lookup-types';
 
 export type { MovieLookup, MovieLookupCandidate } from '@/lib/movie-lookup-types';
 
 const lookupInputSchema = z.object({
     title: z.string().trim().min(2).max(200),
     kind: z.enum(movieKindOptions).optional(),
+});
+
+const lookupDetailsInputSchema = z.object({
+    provider: lookupProviderSchema,
+    externalId: z.string().trim().min(1).max(100),
 });
 
 async function resolveLookupCandidates(data: z.infer<typeof lookupInputSchema>) {
@@ -67,4 +76,31 @@ export const lookupMovie = createServerFn({ method: 'POST' })
             ok: true as const,
             movie: result.candidates[0] as MovieLookupCandidate,
         };
+    });
+
+export const loadMovieLookupDetails = createServerFn({ method: 'POST' })
+    .validator(lookupDetailsInputSchema)
+    .handler(async ({ data }) => {
+        const { getAuthUser } = await import('./session');
+        if (!await getAuthUser()) return { ok: false as const, error: 'Требуется авторизация' };
+
+        if (data.provider === 'wikidata') {
+            return {
+                ok: false as const,
+                error: 'Подробные данные для Wikipedia / Wikidata недоступны',
+            };
+        }
+
+        const { loadKinopoiskCandidate } = await import('./movie-lookup-providers/kinopoisk-dev');
+        const { loadKinopoiskUnofficialCandidate } = await import('./movie-lookup-providers/kinopoisk-unofficial');
+        const loaders = data.provider === 'kinopoisk-unofficial'
+            ? [ loadKinopoiskUnofficialCandidate, loadKinopoiskCandidate ]
+            : [ loadKinopoiskCandidate, loadKinopoiskUnofficialCandidate ];
+
+        for (const load of loaders) {
+            const movie = await load(data.externalId);
+            if (movie) return { ok: true as const, movie };
+        }
+
+        return { ok: false as const, error: 'Не удалось загрузить подробные данные' };
     });
