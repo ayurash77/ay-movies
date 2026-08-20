@@ -104,8 +104,32 @@ export const seriesMetadataSnapshotSchema = z
         }
     });
 
+export const externalRatingSchema = z.object({
+    value: z.number().finite().min(0).max(100),
+    votes: z.number().int().min(0).max(2_000_000_000).nullish(),
+});
+
+export const externalRatingsSchema = z.object({
+    kinopoisk: externalRatingSchema.nullish(),
+    imdb: externalRatingSchema.nullish(),
+    russianCritics: externalRatingSchema.nullish(),
+});
+
+export const movieCastMemberSchema = z.object({
+    provider: z.literal('kinopoisk-dev'),
+    externalId: z.string().min(1).max(100),
+    name: z.string().min(1).max(300),
+    originalName: z.string().max(300).nullish(),
+    photoUrl: nullableHttpUrlSchema,
+    profession: z.literal('actor'),
+    role: z.string().max(500).nullish(),
+    order: z.number().int().min(0).max(999),
+});
+
 export const movieLookupDetailsSchema = movieLookupCandidateSchema.extend({
     seasons: seriesMetadataSnapshotSchema,
+    externalRatings: externalRatingsSchema.nullish(),
+    cast: z.array(movieCastMemberSchema).max(100).default([]),
 });
 
 export type MovieLookup = z.infer<typeof movieLookupSchema>;
@@ -113,4 +137,6 @@ export type LookupProvider = z.infer<typeof lookupProviderSchema>;
 export type MovieLookupCandidate = z.infer<typeof movieLookupCandidateSchema>;
 export type SeriesEpisodeMetadata = z.infer<typeof seriesEpisodeMetadataSchema>;
 export type SeriesSeasonMetadata = z.infer<typeof seriesSeasonMetadataSchema>;
+export type ExternalRatings = z.infer<typeof externalRatingsSchema>;
+export type MovieCastMember = z.infer<typeof movieCastMemberSchema>;
 export type MovieLookupDetails = z.infer<typeof movieLookupDetailsSchema>;

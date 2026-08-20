@@ -11,6 +11,7 @@ import {
 import { resolveMovieLookupDetails } from '../src/lib/movie-lookup-details';
 import {
     mapKinopoiskMovie,
+    mapKinopoiskRichMetadata,
     mapKinopoiskSeasons,
 } from '../src/server/movie-lookup-providers/kinopoisk-dev';
 import {
@@ -138,6 +139,75 @@ test('kinopoisk mapper detects cartoons from type and genres', () => {
     });
 
     assert.equal(candidate?.kind, 'CARTOON');
+});
+
+test('kinopoisk details map ratings, votes, and rich cast', () => {
+    const rich = mapKinopoiskRichMetadata({
+        id: 1331649,
+        rating: { kp: 7.894, imdb: 8.3, russianFilmCritics: 100 },
+        votes: { kp: 42572, imdb: 144000, russianFilmCritics: 7 },
+        persons: [ {
+            id: 2341341,
+            name: 'Джек Лауден',
+            enName: 'Jack Lowden',
+            photo: 'https://example.com/jack.jpg',
+            profession: 'актеры',
+            enProfession: 'actor',
+            description: 'River Cartwright',
+        } ],
+    });
+
+    assert.deepEqual(rich.externalRatings, {
+        kinopoisk: { value: 7.894, votes: 42572 },
+        imdb: { value: 8.3, votes: 144000 },
+        russianCritics: { value: 100, votes: 7 },
+    });
+    assert.deepEqual(rich.cast[0], {
+        provider: 'kinopoisk-dev',
+        externalId: '2341341',
+        name: 'Джек Лауден',
+        originalName: 'Jack Lowden',
+        photoUrl: 'https://example.com/jack.jpg',
+        profession: 'actor',
+        role: 'River Cartwright',
+        order: 0,
+    });
+});
+
+test('kinopoisk rich metadata rejects invalid fields and duplicate cast', () => {
+    const rich = mapKinopoiskRichMetadata({
+        rating: { kp: Number.POSITIVE_INFINITY, imdb: -1, russianFilmCritics: 101 },
+        votes: { kp: -1, imdb: 2.5, russianFilmCritics: 2_000_000_001 },
+        persons: [
+            { id: 1, name: 'Первый актер', enProfession: 'actor', photo: 'ftp://example.com/first.jpg' },
+            { id: 1, name: 'Дубликат', enProfession: 'actor', photo: 'https://example.com/duplicate.jpg' },
+            { id: 2, name: 'Режиссер', enProfession: 'director' },
+            { id: null, name: 'Без идентификатора', enProfession: 'actor' },
+            ...Array.from({ length: 101 }, (_, index) => ({
+                id: index + 10,
+                name: `Актер ${index + 10}`,
+                enProfession: 'actor',
+            })),
+        ],
+    });
+
+    assert.deepEqual(rich.externalRatings, {
+        kinopoisk: null,
+        imdb: null,
+        russianCritics: null,
+    });
+    assert.equal(rich.cast.length, 100);
+    assert.deepEqual(rich.cast[0], {
+        provider: 'kinopoisk-dev',
+        externalId: '1',
+        name: 'Первый актер',
+        originalName: null,
+        photoUrl: null,
+        profession: 'actor',
+        role: null,
+        order: 0,
+    });
+    assert.equal(rich.cast.at(-1)?.externalId, '108');
 });
 
 test('kinopoisk detailed season mapper preserves localized episode metadata', () => {

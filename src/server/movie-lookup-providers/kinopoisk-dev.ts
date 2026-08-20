@@ -1,6 +1,10 @@
 import type { MovieKind } from '@/lib/movie-data';
 import {
+    externalRatingSchema,
+    movieCastMemberSchema,
     movieLookupDetailsSchema,
+    type ExternalRatings,
+    type MovieCastMember,
     type MovieLookupCandidate,
     type MovieLookupDetails,
     type SeriesSeasonMetadata,
@@ -9,9 +13,13 @@ import { normalizeSeriesMetadata, seriesMetadataSummary } from '@/lib/series-met
 
 type KinopoiskName = { name?: string | null };
 type KinopoiskPerson = {
+    id?: number | string | null;
     name?: string | null;
+    enName?: string | null;
+    photo?: string | null;
     profession?: string | null;
     enProfession?: string | null;
+    description?: string | null;
 };
 
 export type KinopoiskMovie = {
@@ -25,7 +33,16 @@ export type KinopoiskMovie = {
     shortDescription?: string | null;
     movieLength?: number | null;
     seriesLength?: number | null;
-    rating?: { kp?: number | null; imdb?: number | null } | null;
+    rating?: {
+        kp?: number | null;
+        imdb?: number | null;
+        russianFilmCritics?: number | null;
+    } | null;
+    votes?: {
+        kp?: number | null;
+        imdb?: number | null;
+        russianFilmCritics?: number | null;
+    } | null;
     poster?: { previewUrl?: string | null; url?: string | null } | null;
     countries?: KinopoiskName[] | null;
     genres?: KinopoiskName[] | null;
@@ -90,6 +107,35 @@ function personMatches(person: KinopoiskPerson, ruNeedle: string, enProfession: 
     return normalize(text(person.enProfession)) === enProfession || profession.includes(ruNeedle);
 }
 
+function isHttpUrl(value: string) {
+    try {
+        const url = new URL(value);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
+function externalId(value: KinopoiskPerson['id']) {
+    if (typeof value === 'number') {
+        return Number.isSafeInteger(value) && value > 0 ? String(value) : null;
+    }
+
+    const normalized = text(value);
+    return normalized || null;
+}
+
+function rating(value: number | null | undefined, votes: number | null | undefined) {
+    const validVotes = typeof votes === 'number'
+        && Number.isInteger(votes)
+        && votes >= 0
+        && votes <= 2_000_000_000
+        ? votes
+        : null;
+    const parsed = externalRatingSchema.safeParse({ value, votes: validVotes });
+    return parsed.success ? parsed.data : null;
+}
+
 function sourceUrl(movie: KinopoiskMovie) {
     if (movie.id == null) return undefined;
     return `https://www.kinopoisk.ru/film/${movie.id}/`;
@@ -142,6 +188,45 @@ export function mapKinopoiskMovie(
         episodesPerSeason,
         posterUrl: movie.poster?.previewUrl ?? movie.poster?.url ?? null,
     };
+}
+
+export function mapKinopoiskRichMetadata(movie: KinopoiskMovie): {
+    externalRatings: ExternalRatings;
+    cast: MovieCastMember[];
+} {
+    const externalRatings = {
+        kinopoisk: rating(movie.rating?.kp, movie.votes?.kp),
+        imdb: rating(movie.rating?.imdb, movie.votes?.imdb),
+        russianCritics: rating(movie.rating?.russianFilmCritics, movie.votes?.russianFilmCritics),
+    };
+    const seenIds = new Set<string>();
+    const cast: MovieCastMember[] = [];
+
+    for (const person of movie.persons ?? []) {
+        if (!personMatches(person, 'актер', 'actor') && !personMatches(person, 'актёр', 'actor')) continue;
+
+        const personId = externalId(person.id);
+        if (!personId || seenIds.has(personId)) continue;
+
+        const photo = text(person.photo);
+        const parsed = movieCastMemberSchema.safeParse({
+            provider: 'kinopoisk-dev',
+            externalId: personId,
+            name: text(person.name),
+            originalName: text(person.enName) || null,
+            photoUrl: photo && isHttpUrl(photo) ? photo : null,
+            profession: 'actor',
+            role: text(person.description) || null,
+            order: cast.length,
+        });
+        if (!parsed.success) continue;
+
+        seenIds.add(personId);
+        cast.push(parsed.data);
+        if (cast.length === 100) break;
+    }
+
+    return { externalRatings, cast };
 }
 
 export function mapKinopoiskSeasons(input: KinopoiskSeason[]): SeriesSeasonMetadata[] {
@@ -237,5 +322,6 @@ export async function loadKinopoiskCandidate(externalId: string): Promise<MovieL
         ...candidate,
         ...seriesMetadataSummary(seasons),
         seasons,
+        ...mapKinopoiskRichMetadata(movie),
     });
 }
