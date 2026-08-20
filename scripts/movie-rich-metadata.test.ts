@@ -219,8 +219,6 @@ test('valid cast upserts compact people and replaces ordered credits', async () 
             },
             update: {
                 name: 'Второй актёр',
-                originalName: null,
-                photoUrl: null,
             },
             select: { id: true },
         },
@@ -251,4 +249,24 @@ test('valid cast upserts compact people and replaces ordered credits', async () 
             { movieId: 'movie-1', personId: 'person-10', profession: 'actor', role: 'Герой', position: 1 },
         ],
     } ]);
+});
+
+test('partial cast updates preserve nullable person identity fields', async () => {
+    const { calls, tx } = createWriter();
+
+    await writeMovieRichMetadata(tx, 'movie-1', {
+        importSucceeded: true,
+        cast,
+    });
+
+    const partialUpdate = calls.personUpserts[0]?.update as Record<string, unknown>;
+    const completeUpdate = calls.personUpserts[1]?.update as Record<string, unknown>;
+
+    assert.equal(Object.hasOwn(partialUpdate, 'originalName'), false);
+    assert.equal(Object.hasOwn(partialUpdate, 'photoUrl'), false);
+    assert.deepEqual(completeUpdate, {
+        name: 'Первый актёр',
+        originalName: 'First Actor',
+        photoUrl: 'https://example.com/first.jpg',
+    });
 });

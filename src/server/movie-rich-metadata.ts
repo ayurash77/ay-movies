@@ -120,8 +120,8 @@ export async function writeMovieRichMetadata(
             },
             update: {
                 name: member.name,
-                originalName: member.originalName ?? null,
-                photoUrl: member.photoUrl ?? null,
+                ...(member.originalName?.trim() ? { originalName: member.originalName } : {}),
+                ...(member.photoUrl ? { photoUrl: member.photoUrl } : {}),
             },
             select: { id: true },
         });
