@@ -4,8 +4,11 @@ import test from 'node:test';
 
 import {
     movieLookupCandidateSchema,
+    movieLookupDetailsSchema,
     type MovieLookupCandidate,
+    type MovieLookupDetails,
 } from '../src/lib/movie-lookup-types';
+import { resolveMovieLookupDetails } from '../src/lib/movie-lookup-details';
 import {
     mapKinopoiskMovie,
     mapKinopoiskSeasons,
@@ -305,12 +308,62 @@ test('movie lookup rejects Wikidata entity ids before importing Kinopoisk loader
     );
 });
 
-test('movie lookup continues to fallback after a detail loader throws', () => {
-    const source = readFileSync('src/server/movie-lookup.ts', 'utf8');
-    const detailsHandler = source.slice(source.indexOf('export const loadMovieLookupDetails'));
+test('detail dispatcher continues to fallback after a loader throws', async () => {
+    const result = await resolveMovieLookupDetails('123', [
+        async () => { throw new Error('provider unavailable'); },
+        async () => detail('MOVIE', []),
+    ]);
 
-    assert.match(detailsHandler, /for \(const load of loaders\) \{\s*try \{\s*const movie = await load\(data\.externalId\)/);
-    assert.match(detailsHandler, /await load\(data\.externalId\);?[\s\S]*?catch \{/);
+    assert.equal(result?.kind, 'MOVIE');
+});
+
+function detail(kind: 'MOVIE' | 'SERIES' | 'CARTOON', seasons: MovieLookupDetails['seasons']): MovieLookupDetails {
+    return movieLookupDetailsSchema.parse({
+        found: true,
+        provider: 'kinopoisk-dev',
+        providerLabel: 'Кинопоиск',
+        externalId: '123',
+        kind,
+        title: 'Тест',
+        seasons,
+    });
+}
+
+test('detail dispatcher falls back after an empty series snapshot', async () => {
+    const calls: string[] = [];
+    const result = await resolveMovieLookupDetails('123', [
+        async () => {
+            calls.push('selected');
+            return detail('SERIES', []);
+        },
+        async () => {
+            calls.push('fallback');
+            return detail('SERIES', [ {
+                number: 1,
+                episodes: [ { number: 1 } ],
+            } ]);
+        },
+    ]);
+
+    assert.deepEqual(calls, [ 'selected', 'fallback' ]);
+    assert.equal(result?.seasons.length, 1);
+});
+
+test('detail dispatcher rejects when every series loader returns an empty snapshot', async () => {
+    const result = await resolveMovieLookupDetails('123', [
+        async () => detail('SERIES', []),
+        async () => detail('SERIES', []),
+    ]);
+
+    assert.equal(result, null);
+});
+
+test('detail dispatcher accepts non-series details without seasons', async () => {
+    const result = await resolveMovieLookupDetails('123', [
+        async () => detail('MOVIE', []),
+    ]);
+
+    assert.equal(result?.kind, 'MOVIE');
 });
 
 test('provider searches do not load details for every candidate', () => {

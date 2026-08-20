@@ -10,6 +10,10 @@ import {
     seriesSummaryWriteData,
     seriesSnapshotWriteData,
 } from '../src/lib/series-metadata';
+import {
+    SERIES_METADATA_LIMITS,
+    seriesMetadataSnapshotSchema,
+} from '../src/lib/movie-lookup-types';
 
 test('keeps source IDs separate from successful metadata import timestamps', () => {
     assert.deepEqual(metadataImportWriteData({
@@ -152,4 +156,60 @@ test('persists detailed snapshots transactionally and reads ordered rows', async
     assert.match(moviesSource, /if \(seriesSeasons\.length > 0\)[\s\S]*seriesSeason\.deleteMany/s);
     assert.match(moviesSource, /absent or empty detailed snapshot preserves existing episode rows/);
     assert.match(moviesSource, /seriesSeasons:\s*\{\s*orderBy:\s*\{\s*number:\s*'asc'\s*}\s*,\s*include:\s*\{\s*episodes:\s*\{\s*orderBy:\s*\{\s*number:\s*'asc'/s);
+});
+
+test('validates detailed snapshot limits at the shared boundary', () => {
+    const episode = { number: SERIES_METADATA_LIMITS.maxEpisodeNumber, name: 'x'.repeat(SERIES_METADATA_LIMITS.maxTitleLength) };
+    const season = {
+        number: SERIES_METADATA_LIMITS.maxSeasonNumber,
+        description: 'x'.repeat(SERIES_METADATA_LIMITS.maxDescriptionLength),
+        episodes: Array.from({ length: SERIES_METADATA_LIMITS.maxEpisodesPerSeason }, (_, index) => ({
+            ...episode,
+            number: index + 1,
+            stillUrl: 'https://example.test/image.jpg',
+        })),
+    };
+
+    assert.doesNotThrow(() => seriesMetadataSnapshotSchema.parse([ season ]));
+    assert.doesNotThrow(() => seriesMetadataSnapshotSchema.parse(Array.from(
+        { length: 5 },
+        (_, seasonIndex) => ({
+            number: seasonIndex + 1,
+            episodes: Array.from({ length: 1000 }, (_, episodeIndex) => ({ number: episodeIndex + 1 })),
+        }),
+    )));
+    assert.throws(() => seriesMetadataSnapshotSchema.parse([ {
+        number: 1,
+        episodes: Array.from({ length: SERIES_METADATA_LIMITS.maxEpisodesPerSeason + 1 }, (_, index) => ({ number: index + 1 })),
+    } ]));
+    assert.throws(() => seriesMetadataSnapshotSchema.parse(Array.from(
+        { length: 6 },
+        (_, seasonIndex) => ({
+            number: seasonIndex + 1,
+            episodes: Array.from({ length: 1000 }, (_, episodeIndex) => ({ number: episodeIndex + 1 })),
+        }),
+    )));
+    assert.throws(() => seriesMetadataSnapshotSchema.parse([ {
+        number: 1,
+        name: 'x'.repeat(SERIES_METADATA_LIMITS.maxTitleLength + 1),
+        episodes: [ { number: 1 } ],
+    } ]));
+    assert.throws(() => seriesMetadataSnapshotSchema.parse([ {
+        number: 1,
+        description: 'x'.repeat(SERIES_METADATA_LIMITS.maxDescriptionLength + 1),
+        episodes: [ { number: 1 } ],
+    } ]));
+    assert.throws(() => seriesMetadataSnapshotSchema.parse([ {
+        number: 1,
+        episodes: [ { number: 1, stillUrl: 'ftp://example.test/image.jpg' } ],
+    } ]));
+    assert.throws(() => seriesMetadataSnapshotSchema.parse([ {
+        number: 1,
+        posterUrl: `https://example.test/${'x'.repeat(SERIES_METADATA_LIMITS.maxUrlLength)}`,
+        episodes: [ { number: 1 } ],
+    } ]));
+    assert.throws(() => seriesMetadataSnapshotSchema.parse([ {
+        number: SERIES_METADATA_LIMITS.maxSeasonNumber + 1,
+        episodes: [ { number: SERIES_METADATA_LIMITS.maxEpisodeNumber + 1 } ],
+    } ]));
 });

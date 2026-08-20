@@ -16,7 +16,7 @@ import { GENRE_OPTIONS, normalizeGenre } from '@/lib/genre-groups';
 import { buildMovieDedupeKey } from '@/lib/movie-dedupe';
 import {
     lookupProviderSchema,
-    seriesSeasonMetadataSchema,
+    seriesMetadataSnapshotSchema,
 } from '@/lib/movie-lookup-types';
 import {
     normalizeSeriesMetadata,
@@ -400,7 +400,7 @@ const movieFieldsSchema = z.object({
     metadataProvider: lookupProviderSchema.nullish(),
     metadataExternalId: z.string().trim().max(100).nullish(),
     metadataImportSucceeded: z.boolean().optional(),
-    seriesSeasons: z.array(seriesSeasonMetadataSchema).max(100).optional(),
+    seriesSeasons: seriesMetadataSnapshotSchema.optional(),
 });
 
 function splitList(value: string | undefined) {

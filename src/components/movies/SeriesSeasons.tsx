@@ -16,11 +16,32 @@ const russianDateFormatter = new Intl.DateTimeFormat('ru-RU', {
     timeZone: 'UTC',
 });
 
-function formatAirDate(value: string | null | undefined) {
+export function formatAirDate(value: string | null | undefined) {
     if (!value) return null;
 
     const date = new Date(`${value}T00:00:00.000Z`);
-    return Number.isNaN(date.getTime()) ? null : russianDateFormatter.format(date);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null;
+
+    const parts = russianDateFormatter.formatToParts(date);
+    const byType = new Map(parts.map((part) => [ part.type, part.value ]));
+    const day = byType.get('day');
+    const month = byType.get('month');
+    const year = byType.get('year');
+    return day && month && year ? `${day} ${month} ${year}` : null;
+}
+
+export function formatEpisodeCount(count: number) {
+    const lastTwoDigits = Math.abs(count) % 100;
+    const lastDigit = Math.abs(count) % 10;
+    const form = lastTwoDigits >= 11 && lastTwoDigits <= 14
+        ? 'серий'
+        : lastDigit === 1
+            ? 'серия'
+            : lastDigit >= 2 && lastDigit <= 4
+                ? 'серии'
+                : 'серий';
+
+    return `${count} ${form}`;
 }
 
 function episodeContentFingerprint(episode: SeriesEpisodeMetadata) {
@@ -191,7 +212,7 @@ export function SeriesSeasons({ movie }: { movie: MovieDetails }) {
 
             <div className="flex min-w-0 flex-col gap-4">
                 <h2 className="text-lg font-semibold">
-                    {activeSeason.number} сезон, {activeSeason.episodes.length} серий
+                    {activeSeason.number} сезон, {formatEpisodeCount(activeSeason.episodes.length)}
                 </h2>
                 {activeSeason.episodes.length > 0 ? (
                     <ol className="flex min-w-0 flex-col gap-5">

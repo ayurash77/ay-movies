@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { formatAirDate, formatEpisodeCount } from '../src/components/movies/SeriesSeasons';
+
+test('formats Russian episode count forms and air dates deterministically', () => {
+    assert.equal(formatEpisodeCount(1), '1 серия');
+    assert.equal(formatEpisodeCount(2), '2 серии');
+    assert.equal(formatEpisodeCount(5), '5 серий');
+    assert.equal(formatEpisodeCount(11), '11 серий');
+    assert.equal(formatEpisodeCount(21), '21 серия');
+    assert.equal(formatAirDate('2022-04-01'), '01 апреля 2022');
+});
 
 function read(path: string) {
     return readFileSync(path, 'utf8');

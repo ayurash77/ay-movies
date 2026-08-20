@@ -2,6 +2,44 @@ import { z } from 'zod';
 
 import { movieKindOptions } from './movie-data';
 
+/** Limits protect direct form submissions as well as provider payloads. */
+export const SERIES_METADATA_LIMITS = {
+    maxSeasons: 100,
+    maxSeasonNumber: 1000,
+    maxEpisodesPerSeason: 1000,
+    maxTotalEpisodes: 5000,
+    maxEpisodeNumber: 10000,
+    maxTitleLength: 500,
+    maxDescriptionLength: 10000,
+    maxUrlLength: 2048,
+} as const;
+
+const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+function isIsoDate(value: string) {
+    if (!isoDatePattern.test(value)) return false;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function isHttpUrl(value: string) {
+    try {
+        const url = new URL(value);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
+const nullableTitleSchema = z.string().max(SERIES_METADATA_LIMITS.maxTitleLength).nullish();
+const nullableDescriptionSchema = z.string().max(SERIES_METADATA_LIMITS.maxDescriptionLength).nullish();
+const nullableAirDateSchema = z.string().refine(isIsoDate, 'Дата должна быть в формате YYYY-MM-DD').nullish();
+const nullableHttpUrlSchema = z.string()
+    .max(SERIES_METADATA_LIMITS.maxUrlLength)
+    .url()
+    .refine(isHttpUrl, 'Укажите корректную http/https ссылку')
+    .nullish();
+
 export const movieLookupSchema = z.object({
     found: z.boolean(),
     kind: z.enum(movieKindOptions).optional(),
@@ -31,29 +69,42 @@ export const movieLookupCandidateSchema = movieLookupSchema.extend({
 });
 
 export const seriesEpisodeMetadataSchema = z.object({
-    number: z.number().int().positive(),
-    name: z.string().nullish(),
-    originalName: z.string().nullish(),
-    description: z.string().nullish(),
-    originalDescription: z.string().nullish(),
-    airDate: z.string().nullish(),
-    stillUrl: z.string().nullish(),
+    number: z.number().int().min(1).max(SERIES_METADATA_LIMITS.maxEpisodeNumber),
+    name: nullableTitleSchema,
+    originalName: nullableTitleSchema,
+    description: nullableDescriptionSchema,
+    originalDescription: nullableDescriptionSchema,
+    airDate: nullableAirDateSchema,
+    stillUrl: nullableHttpUrlSchema,
 });
 
 export const seriesSeasonMetadataSchema = z.object({
-    number: z.number().int().positive(),
-    name: z.string().nullish(),
-    originalName: z.string().nullish(),
-    description: z.string().nullish(),
-    originalDescription: z.string().nullish(),
-    airDate: z.string().nullish(),
+    number: z.number().int().min(1).max(SERIES_METADATA_LIMITS.maxSeasonNumber),
+    name: nullableTitleSchema,
+    originalName: nullableTitleSchema,
+    description: nullableDescriptionSchema,
+    originalDescription: nullableDescriptionSchema,
+    airDate: nullableAirDateSchema,
     durationMin: z.number().int().positive().nullish(),
-    posterUrl: z.string().nullish(),
-    episodes: z.array(seriesEpisodeMetadataSchema),
+    posterUrl: nullableHttpUrlSchema,
+    episodes: z.array(seriesEpisodeMetadataSchema).max(SERIES_METADATA_LIMITS.maxEpisodesPerSeason),
 });
 
+export const seriesMetadataSnapshotSchema = z
+    .array(seriesSeasonMetadataSchema)
+    .max(SERIES_METADATA_LIMITS.maxSeasons)
+    .superRefine((seasons, context) => {
+        const totalEpisodes = seasons.reduce((sum, season) => sum + season.episodes.length, 0);
+        if (totalEpisodes > SERIES_METADATA_LIMITS.maxTotalEpisodes) {
+            context.addIssue({
+                code: 'custom',
+                message: `Максимум ${SERIES_METADATA_LIMITS.maxTotalEpisodes} серий в снимке`,
+            });
+        }
+    });
+
 export const movieLookupDetailsSchema = movieLookupCandidateSchema.extend({
-    seasons: z.array(seriesSeasonMetadataSchema),
+    seasons: seriesMetadataSnapshotSchema,
 });
 
 export type MovieLookup = z.infer<typeof movieLookupSchema>;

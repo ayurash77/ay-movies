@@ -7,6 +7,7 @@ import {
     movieLookupCandidateSchema,
     type MovieLookupCandidate,
 } from '@/lib/movie-lookup-types';
+import { resolveMovieLookupDetails } from '@/lib/movie-lookup-details';
 
 export type { MovieLookup, MovieLookupCandidate } from '@/lib/movie-lookup-types';
 
@@ -101,14 +102,8 @@ export const loadMovieLookupDetails = createServerFn({ method: 'POST' })
             ? [ loadKinopoiskUnofficialCandidate, loadKinopoiskCandidate ]
             : [ loadKinopoiskCandidate, loadKinopoiskUnofficialCandidate ];
 
-        for (const load of loaders) {
-            try {
-                const movie = await load(data.externalId);
-                if (movie) return { ok: true as const, movie };
-            } catch {
-                // Continue with the fallback without exposing provider errors.
-            }
-        }
+        const movie = await resolveMovieLookupDetails(data.externalId, loaders);
+        if (movie) return { ok: true as const, movie };
 
         return { ok: false as const, error: 'Не удалось загрузить подробные данные' };
     });
