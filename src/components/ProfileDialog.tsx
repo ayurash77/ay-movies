@@ -76,9 +76,43 @@ export function profileDialogFallback(user: SessionUser, isOwnProfile: boolean):
     };
 }
 
+type LatestProfileRequestCallbacks<T> = {
+    onStart?: () => void;
+    onSuccess: (value: T) => void;
+    onError?: (error: unknown) => void;
+    onSettled?: () => void;
+};
+
+export function createLatestProfileRequestController() {
+    let sequence = 0;
+
+    return {
+        async run<T>(request: () => Promise<T>, callbacks: LatestProfileRequestCallbacks<T>) {
+            const requestSequence = ++sequence;
+            callbacks.onStart?.();
+            try {
+                const value = await request();
+                if (requestSequence !== sequence) return false;
+                callbacks.onSuccess(value);
+                return true;
+            } catch (error) {
+                if (requestSequence !== sequence) return false;
+                callbacks.onError?.(error);
+                return false;
+            } finally {
+                if (requestSequence === sequence) callbacks.onSettled?.();
+            }
+        },
+        cancel() {
+            sequence += 1;
+        },
+    };
+}
+
 export function ProfileDialog({ open, onOpenChange, user, profileUserId }: ProfileDialogProps) {
     const router = useRouter();
     const fileRef = useRef<HTMLInputElement>(null);
+    const profileRequest = useRef(createLatestProfileRequestController()).current;
     const [ profile, setProfile ] = useState<MyProfile | null>(null);
     const [ profileError, setProfileError ] = useState<string | null>(null);
     const [ isLoading, setIsLoading ] = useState(false);
@@ -91,11 +125,9 @@ export function ProfileDialog({ open, onOpenChange, user, profileUserId }: Profi
     const [ passwordBusy, setPasswordBusy ] = useState(false);
     const isOwnProfile = !profileUserId || profileUserId === user?.id;
 
-    const loadProfile = async () => {
-        setIsLoading(true);
-        setProfileError(null);
-        try {
-            const nextProfile = isOwnProfile
+    const loadProfile = () => profileRequest.run(
+        async () => (
+            isOwnProfile
                 ? await getMyProfile()
                 : await getUserProfile({ data: { userId: profileUserId } }).then((result): MyProfile | null => {
                     if (!result.ok) throw new Error(result.error);
@@ -111,26 +143,38 @@ export function ProfileDialog({ open, onOpenChange, user, profileUserId }: Profi
                         watchlistCount: result.user.watchlistCount,
                         watchedCount: result.user.watchedCount,
                     };
-                });
-            setProfile(nextProfile);
-            setName(nextProfile?.name ?? user?.name ?? '');
-        } catch {
-            const error = 'Не удалось загрузить профиль';
-            setProfileError(error);
-            toast.error(error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+                })
+        ),
+        {
+            onStart: () => {
+                setIsLoading(true);
+                setProfileError(null);
+            },
+            onSuccess: (nextProfile) => {
+                setProfile(nextProfile);
+                setName(nextProfile?.name ?? user?.name ?? '');
+            },
+            onError: () => {
+                const error = 'Не удалось загрузить профиль';
+                setProfileError(error);
+                toast.error(error);
+            },
+            onSettled: () => setIsLoading(false),
+        },
+    );
 
     useEffect(() => {
-        if (!open || !user) return;
+        if (!open || !user) {
+            profileRequest.cancel();
+            return;
+        }
         setProfile(null);
         setProfileError(null);
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
         void loadProfile();
+        return () => profileRequest.cancel();
     }, [ open, profileUserId, user?.id ]);
 
     if (!user) return null;

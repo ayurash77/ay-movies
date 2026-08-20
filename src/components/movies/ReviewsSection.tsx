@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useRouter } from '@tanstack/react-router';
 import { Frown, Meh, MessageSquareText, Pencil, Send, Smile, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,15 +17,28 @@ import {
     type ReviewSentiment,
 } from '@/server/reviews';
 
+type ReviewMutationResult =
+    | { ok: true }
+    | { ok: false; error: string };
+
+export type ReviewsSectionActions = {
+    add: (content: ReviewContent) => Promise<ReviewMutationResult>;
+    update: (reviewId: string, content: ReviewContent) => Promise<ReviewMutationResult>;
+    delete: (reviewId: string) => Promise<ReviewMutationResult>;
+    refresh: () => Promise<void>;
+};
+
 type ReviewsSectionProps = {
     movieId: string;
     reviews: MovieReview[];
     isAuthed: boolean;
+    actions?: ReviewsSectionActions;
 };
 
 type ReviewCardProps = {
     review: MovieReview;
     isAuthed?: boolean;
+    disabled?: boolean;
     onEdit: () => void;
     onDelete: () => void;
 };
@@ -89,7 +102,7 @@ function ReviewEditor({ initial, submitLabel, isSubmitting, onSubmit, onCancel }
                 maxLength={120}
                 aria-label="Заголовок рецензии"
             />
-            <div className="grid grid-cols-3 gap-1" role="group" aria-label="Впечатление от фильма">
+            <div className="grid grid-cols-3 gap-1" role="radiogroup" aria-label="Впечатление от фильма">
                 {sentimentOptions.map((option) => {
                     const Icon = option.icon;
                     const active = sentiment === option.value;
@@ -97,8 +110,11 @@ function ReviewEditor({ initial, submitLabel, isSubmitting, onSubmit, onCancel }
                         <button
                             key={option.value}
                             type="button"
+                            role="radio"
                             onClick={() => setSentiment(option.value)}
-                            aria-pressed={active}
+                            aria-label={option.label}
+                            aria-checked={active}
+                            disabled={isSubmitting}
                             className={cn(
                                 'flex min-h-9 min-w-0 items-center justify-center gap-1 rounded-md border border-border px-1.5 text-xs font-medium text-muted-foreground transition-colors sm:px-2',
                                 active && option.activeClassName,
@@ -134,7 +150,7 @@ function ReviewEditor({ initial, submitLabel, isSubmitting, onSubmit, onCancel }
     );
 }
 
-export function ReviewCard({ review, isAuthed = true, onEdit, onDelete }: ReviewCardProps) {
+export function ReviewCard({ review, isAuthed = true, disabled = false, onEdit, onDelete }: ReviewCardProps) {
     const [ imageFailed, setImageFailed ] = useState(false);
     const authorContent = (
         <>
@@ -196,6 +212,7 @@ export function ReviewCard({ review, isAuthed = true, onEdit, onDelete }: Review
                             size="icon"
                             className="size-8 text-muted-foreground"
                             onClick={onEdit}
+                            disabled={disabled}
                             aria-label="Редактировать рецензию"
                             title="Редактировать"
                         >
@@ -207,6 +224,7 @@ export function ReviewCard({ review, isAuthed = true, onEdit, onDelete }: Review
                             size="icon"
                             className="size-8 text-muted-foreground hover:text-destructive"
                             onClick={onDelete}
+                            disabled={disabled}
                             aria-label="Удалить рецензию"
                             title="Удалить"
                         >
@@ -221,63 +239,88 @@ export function ReviewCard({ review, isAuthed = true, onEdit, onDelete }: Review
     );
 }
 
-export function ReviewsSection({ movieId, reviews, isAuthed }: ReviewsSectionProps) {
+export function ReviewsSection({ movieId, reviews, isAuthed, actions }: ReviewsSectionProps) {
     const router = useRouter();
-    const [ isAdding, setIsAdding ] = useState(false);
+    const mutationLock = useRef(false);
+    const [ isMutating, setIsMutating ] = useState(false);
+    const [ newEditorVersion, setNewEditorVersion ] = useState(0);
     const [ editingId, setEditingId ] = useState<string | null>(null);
-    const [ deletingId, setDeletingId ] = useState<string | null>(null);
+    const reviewActions: ReviewsSectionActions = actions ?? {
+        add: (content) => addReview({ data: { movieId, ...content } }),
+        update: (reviewId, content) => updateReview({ data: { reviewId, ...content } }),
+        delete: (reviewId) => deleteReview({ data: { reviewId } }),
+        refresh: async () => {
+            await router.invalidate();
+        },
+    };
+
+    const runMutation = async ({
+        mutate,
+        onSuccess,
+        successMessage,
+        failureMessage,
+    }: {
+        mutate: () => Promise<ReviewMutationResult>;
+        onSuccess?: () => void;
+        successMessage: string;
+        failureMessage: string;
+    }) => {
+        if (mutationLock.current) return;
+        mutationLock.current = true;
+        setIsMutating(true);
+        try {
+            let result: ReviewMutationResult;
+            try {
+                result = await mutate();
+            } catch {
+                toast.error(failureMessage);
+                return;
+            }
+
+            if (!result.ok) {
+                toast.error(result.error);
+                return;
+            }
+
+            onSuccess?.();
+            toast.success(successMessage);
+            try {
+                await reviewActions.refresh();
+            } catch {
+                toast.error('Операция выполнена, но не удалось обновить список рецензий');
+            }
+        } finally {
+            mutationLock.current = false;
+            setIsMutating(false);
+        }
+    };
 
     const handleAdd = async (content: ReviewContent) => {
-        setIsAdding(true);
-        try {
-            const result = await addReview({ data: { movieId, ...content } });
-            if (result.ok) {
-                toast.success('Рецензия опубликована');
-                await router.invalidate();
-            } else {
-                toast.error(result.error);
-            }
-        } catch {
-            toast.error('Не удалось опубликовать рецензию');
-        } finally {
-            setIsAdding(false);
-        }
+        await runMutation({
+            mutate: () => reviewActions.add(content),
+            onSuccess: () => setNewEditorVersion((version) => version + 1),
+            successMessage: 'Рецензия опубликована',
+            failureMessage: 'Не удалось опубликовать рецензию',
+        });
     };
 
     const handleUpdate = async (reviewId: string, content: ReviewContent) => {
-        setIsAdding(true);
-        try {
-            const result = await updateReview({ data: { reviewId, ...content } });
-            if (result.ok) {
-                setEditingId(null);
-                toast.success('Рецензия обновлена');
-                await router.invalidate();
-            } else {
-                toast.error(result.error);
-            }
-        } catch {
-            toast.error('Не удалось обновить рецензию');
-        } finally {
-            setIsAdding(false);
-        }
+        await runMutation({
+            mutate: () => reviewActions.update(reviewId, content),
+            onSuccess: () => setEditingId(null),
+            successMessage: 'Рецензия обновлена',
+            failureMessage: 'Не удалось обновить рецензию',
+        });
     };
 
     const handleDelete = async (reviewId: string) => {
+        if (mutationLock.current) return;
         if (!window.confirm('Удалить рецензию?')) return;
-        setDeletingId(reviewId);
-        try {
-            const result = await deleteReview({ data: { reviewId } });
-            if (result.ok) {
-                toast.success('Рецензия удалена');
-                await router.invalidate();
-            } else {
-                toast.error(result.error);
-            }
-        } catch {
-            toast.error('Не удалось удалить рецензию');
-        } finally {
-            setDeletingId(null);
-        }
+        await runMutation({
+            mutate: () => reviewActions.delete(reviewId),
+            successMessage: 'Рецензия удалена',
+            failureMessage: 'Не удалось удалить рецензию',
+        });
     };
 
     return (
@@ -290,9 +333,9 @@ export function ReviewsSection({ movieId, reviews, isAuthed }: ReviewsSectionPro
 
             {isAuthed ? (
                 <ReviewEditor
-                    key={`new-${reviews.length}`}
+                    key={`new-${newEditorVersion}`}
                     submitLabel="Опубликовать"
-                    isSubmitting={isAdding}
+                    isSubmitting={isMutating}
                     onSubmit={handleAdd}
                 />
             ) : (
@@ -311,10 +354,11 @@ export function ReviewsSection({ movieId, reviews, isAuthed }: ReviewsSectionPro
                             <ReviewCard
                                 review={review}
                                 isAuthed={isAuthed}
-                                onEdit={() => setEditingId(review.id)}
-                                onDelete={() => {
-                                    if (deletingId !== review.id) void handleDelete(review.id);
+                                disabled={isMutating}
+                                onEdit={() => {
+                                    if (!mutationLock.current) setEditingId(review.id);
                                 }}
+                                onDelete={() => void handleDelete(review.id)}
                             />
                             {editingId === review.id ? (
                                 <ReviewEditor
@@ -324,7 +368,7 @@ export function ReviewsSection({ movieId, reviews, isAuthed }: ReviewsSectionPro
                                         text: review.text,
                                     }}
                                     submitLabel="Сохранить"
-                                    isSubmitting={isAdding}
+                                    isSubmitting={isMutating}
                                     onSubmit={(content) => handleUpdate(review.id, content)}
                                     onCancel={() => setEditingId(null)}
                                 />

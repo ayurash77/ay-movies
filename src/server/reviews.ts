@@ -160,6 +160,80 @@ export async function authorizeReviewManagement(
     return { ok: true, actor };
 }
 
+type ReviewMutationResult =
+    | { ok: true }
+    | { ok: false; error: string };
+
+type CreateReviewDependencies = {
+    getActor: () => Promise<ReviewActor | null>;
+    movieExists: (movieId: string) => Promise<boolean>;
+    createReview: (data: ReviewContent & { movieId: string; userId: string }) => Promise<{ id: string }>;
+    dispatchNotifications: (reviewId: string) => Promise<void>;
+};
+
+export async function createReviewOperation(
+    input: ReviewContent & { movieId: string },
+    dependencies: CreateReviewDependencies,
+): Promise<ReviewMutationResult> {
+    const actor = await dependencies.getActor();
+    if (!actor) return { ok: false, error: 'Требуется авторизация' };
+    if (!await dependencies.movieExists(input.movieId)) {
+        return { ok: false, error: 'Фильм не найден' };
+    }
+
+    const review = await dependencies.createReview({
+        movieId: input.movieId,
+        userId: actor.userId,
+        title: input.title,
+        sentiment: input.sentiment,
+        text: input.text,
+    });
+    try {
+        await dependencies.dispatchNotifications(review.id);
+    } catch {
+        // Notification delivery must not block publishing the review.
+    }
+    return { ok: true };
+}
+
+type UpdateReviewDependencies = ReviewAuthorizationDependencies & {
+    updateReview: (reviewId: string, content: ReviewContent) => Promise<number>;
+};
+
+export async function updateReviewOperation(
+    input: ReviewContent & { reviewId: string },
+    dependencies: UpdateReviewDependencies,
+): Promise<ReviewMutationResult> {
+    const authorization = await authorizeReviewManagement(input.reviewId, dependencies);
+    if (!authorization.ok) return authorization;
+
+    const count = await dependencies.updateReview(input.reviewId, {
+        title: input.title,
+        sentiment: input.sentiment,
+        text: input.text,
+    });
+    return count
+        ? { ok: true }
+        : { ok: false, error: 'Рецензия не найдена' };
+}
+
+type DeleteReviewDependencies = ReviewAuthorizationDependencies & {
+    deleteReview: (reviewId: string) => Promise<number>;
+};
+
+export async function deleteReviewOperation(
+    reviewId: string,
+    dependencies: DeleteReviewDependencies,
+): Promise<ReviewMutationResult> {
+    const authorization = await authorizeReviewManagement(reviewId, dependencies);
+    if (!authorization.ok) return authorization;
+
+    const count = await dependencies.deleteReview(reviewId);
+    return count
+        ? { ok: true }
+        : { ok: false, error: 'Рецензия не найдена' };
+}
+
 function actorFromUser(user: { id: string; role: string } | null): ReviewActor | null {
     return user ? { userId: user.id, role: user.role } : null;
 }
@@ -212,33 +286,21 @@ export const addReview = createServerFn({ method: 'POST' })
         if (!data.ok) return data;
 
         const db = await getDb();
-        const user = await getAuthUser();
-        if (!user) return { ok: false as const, error: 'Требуется авторизация' };
-
-        const movie = await db.movie.findUnique({
-            where: { id: data.value.movieId },
-            select: { id: true },
-        });
-        if (!movie) return { ok: false as const, error: 'Фильм не найден' };
-
-        const review = await db.comment.create({
-            data: {
-                movieId: data.value.movieId,
-                userId: user.id,
-                title: data.value.title,
-                sentiment: data.value.sentiment,
-                text: data.value.text,
+        return createReviewOperation(data.value, {
+            getActor: async () => actorFromUser(await getAuthUser()),
+            movieExists: async (movieId) => Boolean(await db.movie.findUnique({
+                where: { id: movieId },
+                select: { id: true },
+            })),
+            createReview: async (reviewData) => db.comment.create({
+                data: reviewData,
+                select: { id: true },
+            }),
+            dispatchNotifications: async (reviewId) => {
+                const { createReviewNotifications } = await import('./notifications');
+                await createReviewNotifications(reviewId);
             },
-            select: { id: true },
         });
-        try {
-            const { createReviewNotifications } = await import('./notifications');
-            await createReviewNotifications(review.id);
-        } catch {
-            // Notification delivery must not block publishing the review.
-        }
-
-        return { ok: true as const };
     });
 
 export const updateReview = createServerFn({ method: 'POST' })
@@ -247,25 +309,20 @@ export const updateReview = createServerFn({ method: 'POST' })
         if (!data.ok) return data;
 
         const db = await getDb();
-        const authorization = await authorizeReviewManagement(data.value.reviewId, {
+        return updateReviewOperation(data.value, {
             getActor: async () => actorFromUser(await getAuthUser()),
             findAuthorId: async (reviewId) => {
                 const review = await db.comment.findUnique({ where: { id: reviewId }, select: { userId: true } });
                 return review?.userId ?? null;
             },
-        });
-        if (!authorization.ok) return authorization;
-
-        const result = await db.comment.updateMany({
-            where: { id: data.value.reviewId },
-            data: {
-                title: data.value.title,
-                sentiment: data.value.sentiment,
-                text: data.value.text,
+            updateReview: async (reviewId, content) => {
+                const result = await db.comment.updateMany({
+                    where: { id: reviewId },
+                    data: content,
+                });
+                return result.count;
             },
         });
-        if (!result.count) return { ok: false as const, error: 'Рецензия не найдена' };
-        return { ok: true as const };
     });
 
 export const deleteReview = createServerFn({ method: 'POST' })
@@ -274,16 +331,15 @@ export const deleteReview = createServerFn({ method: 'POST' })
         if (!data.ok) return data;
 
         const db = await getDb();
-        const authorization = await authorizeReviewManagement(data.reviewId, {
+        return deleteReviewOperation(data.reviewId, {
             getActor: async () => actorFromUser(await getAuthUser()),
             findAuthorId: async (reviewId) => {
                 const review = await db.comment.findUnique({ where: { id: reviewId }, select: { userId: true } });
                 return review?.userId ?? null;
             },
+            deleteReview: async (reviewId) => {
+                const result = await db.comment.deleteMany({ where: { id: reviewId } });
+                return result.count;
+            },
         });
-        if (!authorization.ok) return authorization;
-
-        const result = await db.comment.deleteMany({ where: { id: data.reviewId } });
-        if (!result.count) return { ok: false as const, error: 'Рецензия не найдена' };
-        return { ok: true as const };
     });
