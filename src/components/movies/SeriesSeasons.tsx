@@ -109,12 +109,12 @@ export function SeriesSeasons({ movie }: { movie: MovieDetails }) {
                 className="flex gap-2 overflow-x-auto pb-1"
                 aria-label="Выбор сезона"
             >
-                {seasons.map((season) => {
+                {seasons.map((season, seasonIndex) => {
                     const isActive = season.number === activeSeason.number;
 
                     return (
                         <Button
-                            key={season.number}
+                            key={`season-${season.number}-${seasonIndex}`}
                             type="button"
                             variant={isActive ? 'default' : 'ghost'}
                             className="size-10 shrink-0 p-0"
@@ -134,9 +134,9 @@ export function SeriesSeasons({ movie }: { movie: MovieDetails }) {
                 </h2>
                 {activeSeason.episodes.length > 0 ? (
                     <ol className="flex min-w-0 flex-col gap-5">
-                        {activeSeason.episodes.map((episode) => (
+                        {activeSeason.episodes.map((episode, episodeIndex) => (
                             <EpisodeRow
-                                key={episode.number}
+                                key={`episode-${activeSeason.number}-${episode.number}-${episodeIndex}`}
                                 episode={episode}
                                 seriesTitle={movie.title}
                             />
