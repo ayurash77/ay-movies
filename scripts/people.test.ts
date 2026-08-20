@@ -78,7 +78,10 @@ test('fresh cache is reused without provider request', async () => {
         maxAgeMs: MAX_AGE_MS,
         loadFresh: async () => {
             loads += 1;
-            return { ...cachedProfile, name: 'Обновлённый актёр' };
+            return {
+                profile: { ...cachedProfile, name: 'Обновлённый актёр' },
+                complete: true,
+            };
         },
     });
 
@@ -96,7 +99,7 @@ test('stale cache is replaced with provider profile', async () => {
         },
         now: NOW,
         maxAgeMs: MAX_AGE_MS,
-        loadFresh: async () => freshProfile,
+        loadFresh: async () => ({ profile: freshProfile, complete: true }),
     });
 
     assert.equal(result.source, 'provider');
@@ -116,6 +119,36 @@ test('stale cache remains available when refresh fails', async () => {
 
     assert.equal(result.source, 'stale-cache');
     assert.deepEqual(result.profile, cachedProfile);
+});
+
+test('stale cache remains available when refresh rejects', async () => {
+    const result = await resolvePersonSnapshot({
+        cached: {
+            profile: cachedProfile,
+            updatedAt: new Date('2026-08-10T12:00:00Z'),
+        },
+        now: NOW,
+        maxAgeMs: MAX_AGE_MS,
+        loadFresh: async () => {
+            throw new Error('provider failed');
+        },
+    });
+
+    assert.equal(result.source, 'stale-cache');
+    assert.deepEqual(result.profile, cachedProfile);
+});
+
+test('refresh rejection without cache returns unavailable', async () => {
+    const result = await resolvePersonSnapshot({
+        cached: null,
+        now: NOW,
+        maxAgeMs: MAX_AGE_MS,
+        loadFresh: async () => {
+            throw new Error('provider failed');
+        },
+    });
+
+    assert.deepEqual(result, { source: 'unavailable', profile: null });
 });
 
 test('person mapper keeps acting credits, deduplicates IDs, and retains fallback titles', () => {
@@ -172,6 +205,45 @@ test('person mapper keeps acting credits, deduplicates IDs, and retains fallback
     ]);
 });
 
+test('person mapper ignores malformed collection shapes and entries', () => {
+    const profile = mapKinopoiskPerson('42', {
+        name: 'Актёр',
+        birthPlace: 42,
+        profession: [ null, { value: 'Актёр' } ],
+        facts: { value: 'Некорректный факт' },
+        movies: [
+            null,
+            'invalid',
+            { id: 100, name: 'Базовое название', enProfession: 'actor', description: 'Герой' },
+        ],
+    } as never, [
+        null,
+        'invalid',
+        {
+            id: 100,
+            name: 'Обогащённое название',
+            year: '2020',
+            poster: { previewUrl: 123 },
+            rating: { kp: '8.1' },
+        },
+    ] as never);
+
+    assert.ok(profile);
+    assert.deepEqual(profile.birthPlace, []);
+    assert.deepEqual(profile.professions, [ 'Актёр' ]);
+    assert.deepEqual(profile.facts, []);
+    assert.deepEqual(profile.filmography, [ {
+        externalId: '100',
+        title: 'Обогащённое название',
+        originalTitle: null,
+        year: null,
+        posterUrl: null,
+        type: null,
+        rating: null,
+        role: 'Герой',
+    } ]);
+});
+
 test('person loader enriches filmography in bounded parallel chunks of at most 100 IDs', async () => {
     const previousFetch = globalThis.fetch;
     const previousToken = process.env.KINOPOISK_DEV_TOKEN;
@@ -208,12 +280,90 @@ test('person loader enriches filmography in bounded parallel chunks of at most 1
     };
 
     try {
-        const profile = await loadKinopoiskPerson('42');
+        const loaded = await loadKinopoiskPerson('42');
 
         assert.deepEqual(chunkSizes, [ 100, 100, 5 ]);
         assert.ok(maxActiveChunks > 1 && maxActiveChunks <= 4);
-        assert.equal(profile?.filmography.length, 205);
-        assert.equal(profile?.filmography[100]?.title, 'Обогащённый 101');
+        assert.equal(loaded?.complete, true);
+        assert.equal(loaded?.profile.filmography.length, 205);
+        assert.equal(loaded?.profile.filmography[100]?.title, 'Обогащённый 101');
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+        if (previousBaseUrl === undefined) delete process.env.KINOPOISK_DEV_BASE_URL;
+        else process.env.KINOPOISK_DEV_BASE_URL = previousBaseUrl;
+    }
+});
+
+test('person loader returns partial base filmography when an enrichment chunk fails', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+    const previousBaseUrl = process.env.KINOPOISK_DEV_BASE_URL;
+
+    process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+    process.env.KINOPOISK_DEV_BASE_URL = 'https://kinopoisk.test';
+    globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname === '/v1.4/person/42') {
+            return Response.json({
+                id: 42,
+                name: 'Актёр',
+                movies: [ {
+                    id: 100,
+                    name: 'Базовое название',
+                    enProfession: 'actor',
+                    description: 'Свежая роль',
+                } ],
+            });
+        }
+        return Response.json({}, { status: 503 });
+    };
+
+    try {
+        const loaded = await loadKinopoiskPerson('42');
+
+        assert.equal(loaded?.complete, false);
+        assert.deepEqual(loaded?.profile.filmography, [ {
+            externalId: '100',
+            title: 'Базовое название',
+            originalTitle: null,
+            year: null,
+            posterUrl: null,
+            type: null,
+            rating: null,
+            role: 'Свежая роль',
+        } ]);
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+        if (previousBaseUrl === undefined) delete process.env.KINOPOISK_DEV_BASE_URL;
+        else process.env.KINOPOISK_DEV_BASE_URL = previousBaseUrl;
+    }
+});
+
+test('person loader treats malformed HTTP 200 collections as partial instead of throwing', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+    const previousBaseUrl = process.env.KINOPOISK_DEV_BASE_URL;
+
+    process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+    process.env.KINOPOISK_DEV_BASE_URL = 'https://kinopoisk.test';
+    globalThis.fetch = async () => Response.json({
+        id: 42,
+        name: 'Актёр',
+        birthPlace: 42,
+        facts: [ null ],
+        movies: { id: 100 },
+    });
+
+    try {
+        const loaded = await loadKinopoiskPerson('42');
+
+        assert.equal(loaded?.complete, false);
+        assert.equal(loaded?.profile.name, 'Актёр');
+        assert.deepEqual(loaded?.profile.filmography, []);
     } finally {
         globalThis.fetch = previousFetch;
         if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
@@ -269,7 +419,7 @@ test('profile refresh persists validated snapshot and matches local movies by ex
         personId: 'person-local-42',
         store,
         now: NOW,
-        loadFresh: async () => cachedProfile,
+        loadFresh: async () => ({ profile: cachedProfile, complete: true }),
     });
 
     assert.equal(result.ok, true);
@@ -322,9 +472,12 @@ test('partial refresh does not replace cached filmography with an empty snapshot
         store,
         now: NOW,
         loadFresh: async () => ({
-            ...cachedProfile,
-            name: 'Обновлённое имя',
-            filmography: [],
+            complete: false,
+            profile: {
+                ...cachedProfile,
+                name: 'Обновлённое имя',
+                filmography: [],
+            },
         }),
     });
 
@@ -337,6 +490,114 @@ test('partial refresh does not replace cached filmography with an empty snapshot
     } ]);
     const update = calls.updates[0] as { data?: { filmography?: unknown } };
     assert.deepEqual(update.data?.filmography, cachedProfile.filmography);
+});
+
+test('partial refresh merges cached enrichment by external ID without extending TTL', async () => {
+    const staleUpdatedAt = new Date('2026-08-10T12:00:00.000Z');
+    const { calls, store } = createStore({
+        id: 'person-local-42',
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: cachedProfile.name,
+        originalName: cachedProfile.originalName,
+        photoUrl: cachedProfile.photoUrl,
+        sex: cachedProfile.sex,
+        growthCm: cachedProfile.growthCm,
+        birthDate: new Date('1980-01-02T00:00:00.000Z'),
+        deathDate: null,
+        birthPlace: cachedProfile.birthPlace,
+        professions: cachedProfile.professions,
+        facts: cachedProfile.facts,
+        filmography: cachedProfile.filmography,
+        profileUpdatedAt: staleUpdatedAt,
+    });
+    const partialProfile: PersonProfile = {
+        ...cachedProfile,
+        filmography: [
+            {
+                externalId: '100',
+                title: 'Свежая база',
+                originalTitle: null,
+                year: null,
+                posterUrl: null,
+                type: null,
+                rating: null,
+                role: 'Свежая роль',
+            },
+            {
+                externalId: '200',
+                title: 'Новая работа',
+                originalTitle: null,
+                year: null,
+                posterUrl: null,
+                type: null,
+                rating: null,
+                role: 'Камео',
+            },
+        ],
+    };
+
+    const result = await resolvePersonProfile({
+        personId: 'person-local-42',
+        store,
+        now: NOW,
+        loadFresh: async () => ({ profile: partialProfile, complete: false }),
+    });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.source, 'partial-provider');
+    assert.deepEqual(result.person.filmography[0], {
+        ...cachedProfile.filmography[0],
+        title: 'Свежая база',
+        role: 'Свежая роль',
+        localMovieId: 'local-100',
+    });
+    assert.deepEqual(result.person.filmography[1], partialProfile.filmography[1]);
+    const update = calls.updates[0] as { data?: { filmography?: unknown; profileUpdatedAt?: unknown } };
+    assert.deepEqual(update.data?.filmography, [
+        {
+            ...cachedProfile.filmography[0],
+            title: 'Свежая база',
+            role: 'Свежая роль',
+        },
+        partialProfile.filmography[1],
+    ]);
+    assert.equal(update.data?.profileUpdatedAt, staleUpdatedAt);
+});
+
+test('partial first refresh is displayable but does not create a fresh TTL', async () => {
+    const { calls, store } = createStore({
+        id: 'person-local-42',
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: 'Компактное имя',
+        originalName: null,
+        photoUrl: null,
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [ 'actor' ],
+        facts: [],
+        filmography: null,
+        profileUpdatedAt: null,
+    });
+
+    const result = await resolvePersonProfile({
+        personId: 'person-local-42',
+        store,
+        now: NOW,
+        loadFresh: async () => ({ profile: cachedProfile, complete: false }),
+    });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.source, 'partial-provider');
+    assert.equal(result.person.filmography[0]?.title, 'Старый фильм');
+    const update = calls.updates[0] as { data?: { profileUpdatedAt?: unknown } };
+    assert.equal(update.data?.profileUpdatedAt, null);
 });
 
 test('failed first refresh leaves compact person untouched and returns unavailable', async () => {

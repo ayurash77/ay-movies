@@ -6,6 +6,7 @@ import {
     personProfileSchema,
     type PersonFilmographyEntry,
     type PersonProfile,
+    type PersonProfileLoadResult,
 } from '@/lib/person-data';
 import { resolvePersonSnapshot } from '@/lib/person-cache';
 
@@ -41,7 +42,7 @@ type PersonUpdateData = {
     professions: string[];
     facts: string[];
     filmography: PersonFilmographyEntry[];
-    profileUpdatedAt: Date;
+    profileUpdatedAt: Date | null;
 };
 
 export type PersonProfileStore = {
@@ -68,7 +69,7 @@ type ResolvePersonProfileInput = {
     store: PersonProfileStore;
     now?: Date;
     maxAgeMs?: number;
-    loadFresh: (provider: string, externalId: string) => Promise<PersonProfile | null>;
+    loadFresh: (provider: string, externalId: string) => Promise<PersonProfileLoadResult | null>;
 };
 
 const personSelect: Record<keyof PersonProfileRow, true> = {
@@ -116,7 +117,30 @@ function compactProfile(row: PersonProfileRow, filmography: PersonFilmographyEnt
     return parsed.success ? parsed.data : null;
 }
 
-function mergeFreshProfile(compact: PersonProfile, fresh: PersonProfile) {
+function mergePartialFilmography(
+    cached: PersonFilmographyEntry[],
+    fresh: PersonFilmographyEntry[],
+) {
+    const cachedById = new Map(cached.map((entry) => [ entry.externalId, entry ]));
+    const freshIds = new Set(fresh.map((entry) => entry.externalId));
+    const merged = fresh.map((entry) => {
+        const previous = cachedById.get(entry.externalId);
+        if (!previous) return entry;
+
+        return {
+            ...entry,
+            originalTitle: entry.originalTitle ?? previous.originalTitle ?? null,
+            year: entry.year ?? previous.year ?? null,
+            posterUrl: entry.posterUrl ?? previous.posterUrl ?? null,
+            type: entry.type ?? previous.type ?? null,
+            rating: entry.rating ?? previous.rating ?? null,
+        };
+    });
+
+    return [ ...merged, ...cached.filter((entry) => !freshIds.has(entry.externalId)) ];
+}
+
+function mergeFreshProfile(compact: PersonProfile, fresh: PersonProfile, complete: boolean) {
     const parsed = personProfileSchema.safeParse({
         ...fresh,
         provider: compact.provider,
@@ -131,7 +155,9 @@ function mergeFreshProfile(compact: PersonProfile, fresh: PersonProfile) {
         birthPlace: fresh.birthPlace.length ? fresh.birthPlace : compact.birthPlace,
         professions: fresh.professions.length ? fresh.professions : compact.professions,
         facts: fresh.facts.length ? fresh.facts : compact.facts,
-        filmography: fresh.filmography.length ? fresh.filmography : compact.filmography,
+        filmography: complete
+            ? fresh.filmography
+            : mergePartialFilmography(compact.filmography, fresh.filmography),
     });
     return parsed.success ? parsed.data : null;
 }
@@ -196,14 +222,16 @@ export async function resolvePersonProfile({
         maxAgeMs,
         loadFresh: async () => {
             const fresh = await loadFresh(row.provider, row.externalId);
-            return fresh ? mergeFreshProfile(compact, fresh) : null;
+            if (!fresh) return null;
+            const profile = mergeFreshProfile(compact, fresh.profile, fresh.complete);
+            return profile ? { profile, complete: fresh.complete } : null;
         },
     });
     if (!snapshot.profile) {
         return { ok: false as const, error: 'Профиль персоны временно недоступен' };
     }
 
-    if (snapshot.source === 'provider') {
+    if (snapshot.source === 'provider' || snapshot.source === 'partial-provider') {
         const profile = snapshot.profile;
         try {
             await store.person.update({
@@ -220,7 +248,7 @@ export async function resolvePersonProfile({
                     professions: profile.professions,
                     facts: profile.facts,
                     filmography: storedFilmography(profile.filmography),
-                    profileUpdatedAt: now,
+                    profileUpdatedAt: snapshot.source === 'provider' ? now : row.profileUpdatedAt,
                 },
             });
         } catch {

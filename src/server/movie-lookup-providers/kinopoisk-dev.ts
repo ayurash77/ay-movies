@@ -2,6 +2,7 @@ import type { MovieKind } from '@/lib/movie-data';
 import {
     personProfileSchema,
     type PersonProfile,
+    type PersonProfileLoadResult,
 } from '@/lib/person-data';
 import {
     externalRatingSchema,
@@ -113,6 +114,86 @@ function boundedText(value: unknown) {
     return text(value).slice(0, 300);
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : null;
+}
+
+function array(value: unknown) {
+    return Array.isArray(value) ? value : [];
+}
+
+function nullableString(value: unknown) {
+    return value == null || typeof value === 'string';
+}
+
+function nullableNumber(value: unknown) {
+    return value == null || (typeof value === 'number' && Number.isFinite(value));
+}
+
+function valueListShape(value: unknown) {
+    return value == null || (Array.isArray(value) && value.every((item) => {
+        const data = record(item);
+        return Boolean(data && nullableString(data.value));
+    }));
+}
+
+function personMovieShape(value: unknown) {
+    const data = record(value);
+    return Boolean(
+        data
+        && externalId(data.id)
+        && nullableString(data.name)
+        && nullableString(data.alternativeName)
+        && nullableString(data.enProfession)
+        && nullableString(data.description),
+    );
+}
+
+function personPayloadComplete(person: Record<string, unknown>) {
+    return nullableString(person.name)
+        && nullableString(person.enName)
+        && nullableString(person.photo)
+        && nullableString(person.sex)
+        && nullableNumber(person.growth)
+        && nullableString(person.birthday)
+        && nullableString(person.death)
+        && valueListShape(person.birthPlace)
+        && valueListShape(person.profession)
+        && valueListShape(person.facts)
+        && Array.isArray(person.movies)
+        && person.movies.every(personMovieShape);
+}
+
+function movieSummaryShape(value: unknown) {
+    const data = record(value);
+    if (!data || !externalId(data.id)) return false;
+    if (
+        !nullableString(data.name)
+        || !nullableString(data.alternativeName)
+        || !nullableString(data.enName)
+        || !nullableString(data.type)
+        || !nullableNumber(data.year)
+    ) {
+        return false;
+    }
+
+    const poster = data.poster == null ? null : record(data.poster);
+    if (data.poster != null && (!poster
+        || !nullableString(poster.previewUrl)
+        || !nullableString(poster.url))) {
+        return false;
+    }
+
+    const ratingData = data.rating == null ? null : record(data.rating);
+    return data.rating == null || Boolean(
+        ratingData
+        && nullableNumber(ratingData.kp)
+        && nullableNumber(ratingData.imdb),
+    );
+}
+
 function normalize(value: string) {
     return value.toLowerCase().replaceAll('ё', 'е').trim();
 }
@@ -147,7 +228,7 @@ function isHttpUrl(value: string) {
     }
 }
 
-function externalId(value: number | string | null | undefined) {
+function externalId(value: unknown) {
     if (typeof value === 'number') {
         return Number.isSafeInteger(value) && value > 0 ? String(value) : null;
     }
@@ -167,24 +248,30 @@ function nullableDate(value: unknown) {
         : null;
 }
 
-function stringValues(values: KinopoiskValue[] | null | undefined, max: number) {
+function stringValues(values: unknown, max: number) {
     const seen = new Set<string>();
-    return (values ?? []).flatMap((item) => {
-        const value = boundedText(item.value);
+    return array(values).flatMap((item) => {
+        const value = boundedText(record(item)?.value);
         if (!value || seen.has(value)) return [];
         seen.add(value);
         return [ value ];
     }).slice(0, max);
 }
 
-function actingCredits(person: KinopoiskPersonProfile) {
+function actingCredits(person: unknown) {
     const seen = new Set<string>();
-    return (person.movies ?? []).flatMap((movie) => {
-        if (normalize(text(movie.enProfession)) !== 'actor') return [];
+    return array(record(person)?.movies).flatMap((value) => {
+        const movie = record(value);
+        if (!movie || normalize(text(movie.enProfession)) !== 'actor') return [];
         const id = externalId(movie.id);
         if (!id || seen.has(id)) return [];
         seen.add(id);
-        return [ { ...movie, externalId: id } ];
+        return [ {
+            externalId: id,
+            name: text(movie.name) || null,
+            alternativeName: text(movie.alternativeName) || null,
+            description: text(movie.description) || null,
+        } ];
     }).slice(0, 2_000);
 }
 
@@ -301,37 +388,42 @@ export function mapKinopoiskRichMetadata(movie: KinopoiskMovie): {
 
 export function mapKinopoiskPerson(
     personExternalId: string,
-    person: KinopoiskPersonProfile,
-    movieSummaries: KinopoiskMovie[] = [],
+    person: unknown,
+    movieSummaries: unknown = [],
 ): PersonProfile | null {
+    const personData = record(person);
+    if (!personData) return null;
+
     const summaries = new Map(
-        movieSummaries.flatMap((movie) => {
+        array(movieSummaries).flatMap((value) => {
+            const movie = record(value) as KinopoiskMovie | null;
+            if (!movie) return [];
             const id = externalId(movie.id);
             return id ? [ [ id, movie ] as const ] : [];
         }),
     );
-    const localizedName = boundedText(person.name);
-    const englishName = boundedText(person.enName);
+    const localizedName = boundedText(personData.name);
+    const englishName = boundedText(personData.enName);
     const name = localizedName || englishName;
     if (!name) return null;
 
-    const photo = text(person.photo);
+    const photo = text(personData.photo);
     const parsed = personProfileSchema.safeParse({
         provider: 'kinopoisk-dev',
         externalId: personExternalId,
         name,
         originalName: localizedName && englishName ? englishName : null,
         photoUrl: photo && isHttpUrl(photo) ? photo : null,
-        sex: boundedText(person.sex) || null,
-        growthCm: typeof person.growth === 'number' && Number.isInteger(person.growth)
-            ? person.growth
+        sex: boundedText(personData.sex) || null,
+        growthCm: typeof personData.growth === 'number' && Number.isInteger(personData.growth)
+            ? personData.growth
             : null,
-        birthDate: nullableDate(person.birthday),
-        deathDate: nullableDate(person.death),
-        birthPlace: stringValues(person.birthPlace, 100),
-        professions: stringValues(person.profession, 100),
-        facts: stringValues(person.facts, 100),
-        filmography: actingCredits(person).flatMap((credit) => {
+        birthDate: nullableDate(personData.birthday),
+        deathDate: nullableDate(personData.death),
+        birthPlace: stringValues(personData.birthPlace, 100),
+        professions: stringValues(personData.profession, 100),
+        facts: stringValues(personData.facts, 100),
+        filmography: actingCredits(personData).flatMap((credit) => {
             const summary = summaries.get(credit.externalId);
             const title = boundedText(summary?.name)
                 || boundedText(credit.name)
@@ -427,17 +519,21 @@ async function loadKinopoiskSeasons(movieId: string) {
     return json?.docs ?? [];
 }
 
-export async function loadKinopoiskPerson(personExternalId: string): Promise<PersonProfile | null> {
+export async function loadKinopoiskPerson(
+    personExternalId: string,
+): Promise<PersonProfileLoadResult | null> {
     const personId = personExternalId.trim();
     if (!externalId(personId)) return null;
 
-    const person = await kinopoiskJson<KinopoiskPersonProfile>(
+    const person = await kinopoiskJson<unknown>(
         `/v1.4/person/${encodeURIComponent(personId)}`,
     );
-    if (!person) return null;
+    const personData = record(person);
+    if (!personData) return null;
 
-    const ids = actingCredits(person).map((credit) => credit.externalId);
-    const summaries: KinopoiskMovie[] = [];
+    let complete = personPayloadComplete(personData);
+    const ids = actingCredits(personData).map((credit) => credit.externalId);
+    const summaries: unknown[] = [];
     const chunks = Array.from(
         { length: Math.ceil(ids.length / 100) },
         (_, index) => ids.slice(index * 100, (index + 1) * 100),
@@ -450,16 +546,29 @@ export async function loadKinopoiskPerson(personExternalId: string): Promise<Per
             const params = new URLSearchParams({ limit: String(chunk.length) });
             for (const id of chunk) params.append('id', id);
 
-            const response = await kinopoiskJson<KinopoiskSearchResponse>(
+            const response = await kinopoiskJson<unknown>(
                 '/v1.4/movie',
                 params,
                 enrichmentSignal,
             );
-            summaries.push(...(response?.docs ?? []));
+            const docsValue = record(response)?.docs;
+            if (!Array.isArray(docsValue)) {
+                complete = false;
+                continue;
+            }
+
+            if (!docsValue.every(movieSummaryShape)) complete = false;
+            const returnedIds = new Set(docsValue.flatMap((movie) => {
+                const id = externalId(record(movie)?.id);
+                return id ? [ id ] : [];
+            }));
+            if (!chunk.every((id) => returnedIds.has(id))) complete = false;
+            summaries.push(...docsValue);
         }
     }));
 
-    return mapKinopoiskPerson(personId, person, summaries);
+    const profile = mapKinopoiskPerson(personId, personData, summaries);
+    return profile ? { profile, complete } : null;
 }
 
 export async function lookupKinopoiskCandidates(title: string, kind?: MovieKind): Promise<MovieLookupCandidate[]> {

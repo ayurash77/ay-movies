@@ -52,3 +52,7 @@ export const personProfileSchema = z.object({
 
 export type PersonFilmographyEntry = z.infer<typeof personFilmographyEntrySchema>;
 export type PersonProfile = z.infer<typeof personProfileSchema>;
+export type PersonProfileLoadResult = {
+    profile: PersonProfile;
+    complete: boolean;
+};
