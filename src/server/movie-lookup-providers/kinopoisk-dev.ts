@@ -132,13 +132,6 @@ function nullableNumber(value: unknown) {
     return value == null || (typeof value === 'number' && Number.isFinite(value));
 }
 
-function valueListShape(value: unknown) {
-    return value == null || (Array.isArray(value) && value.every((item) => {
-        const data = record(item);
-        return Boolean(data && nullableString(data.value));
-    }));
-}
-
 function personMovieShape(value: unknown) {
     const data = record(value);
     return Boolean(
@@ -151,19 +144,17 @@ function personMovieShape(value: unknown) {
     );
 }
 
-function personPayloadComplete(person: Record<string, unknown>) {
-    return nullableString(person.name)
-        && nullableString(person.enName)
-        && nullableString(person.photo)
-        && nullableString(person.sex)
-        && nullableNumber(person.growth)
-        && nullableString(person.birthday)
-        && nullableString(person.death)
-        && valueListShape(person.birthPlace)
-        && valueListShape(person.profession)
-        && valueListShape(person.facts)
-        && Array.isArray(person.movies)
-        && person.movies.every(personMovieShape);
+function validPersonPayload(value: unknown): (Record<string, unknown> & { movies: unknown[] }) | null {
+    const person = record(value);
+    if (
+        !person
+        || !externalId(person.id)
+        || !(boundedText(person.name) || boundedText(person.enName))
+        || !Array.isArray(person.movies)
+    ) {
+        return null;
+    }
+    return person as Record<string, unknown> & { movies: unknown[] };
 }
 
 function movieSummaryShape(value: unknown) {
@@ -528,10 +519,10 @@ export async function loadKinopoiskPerson(
     const person = await kinopoiskJson<unknown>(
         `/v1.4/person/${encodeURIComponent(personId)}`,
     );
-    const personData = record(person);
+    const personData = validPersonPayload(person);
     if (!personData) return null;
 
-    let complete = personPayloadComplete(personData);
+    let complete = personData.movies.every(personMovieShape);
     const ids = actingCredits(personData).map((credit) => credit.externalId);
     const summaries: unknown[] = [];
     const chunks = Array.from(
@@ -557,13 +548,14 @@ export async function loadKinopoiskPerson(
                 continue;
             }
 
-            if (!docsValue.every(movieSummaryShape)) complete = false;
-            const returnedIds = new Set(docsValue.flatMap((movie) => {
+            const validDocs = docsValue.filter(movieSummaryShape);
+            if (validDocs.length !== docsValue.length) complete = false;
+            const returnedIds = new Set(validDocs.flatMap((movie) => {
                 const id = externalId(record(movie)?.id);
                 return id ? [ id ] : [];
             }));
             if (!chunk.every((id) => returnedIds.has(id))) complete = false;
-            summaries.push(...docsValue);
+            summaries.push(...validDocs);
         }
     }));
 

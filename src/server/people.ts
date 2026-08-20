@@ -248,7 +248,9 @@ export async function resolvePersonProfile({
                     professions: profile.professions,
                     facts: profile.facts,
                     filmography: storedFilmography(profile.filmography),
-                    profileUpdatedAt: snapshot.source === 'provider' ? now : row.profileUpdatedAt,
+                    profileUpdatedAt: snapshot.source === 'provider'
+                        ? now
+                        : cached?.updatedAt ?? null,
                 },
             });
         } catch {
