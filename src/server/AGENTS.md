@@ -17,14 +17,16 @@
 - `password.ts` — scrypt hashing.
 - `movies.ts` — каталог, поиск, пагинация, CRUD, рейтинги, watch lists и
   транзакционное сохранение подробных snapshot сезонов/серий.
-- `movie-lookup.ts` — `lookupMovieCandidates` возвращает легкие candidates,
-  `loadMovieLookupDetails` загружает детали выбранного provider/external ID;
-  `lookupMovie` оставлен совместимым wrapper. Providers лежат в
-  `movie-lookup-providers/`: `kinopoisk.dev` работает при
-  `KINOPOISK_DEV_TOKEN` и основной для детальных серий,
-  `kinopoiskapiunofficial.tech` при `KINOPOISK_UNOFFICIAL_TOKEN` используется
-  fallback, Wikipedia/Wikidata остается fallback без токенов только для
-  базовых метаданных.
+- `movie-lookup.ts` — `lookupMovieCandidates` параллельно вызывает доступные
+  Kinopoisk searches, возвращает легкие candidates и упорядочивает общий список
+  с `kinopoisk.dev` как preferred/default. `loadMovieLookupDetails` загружает
+  детали выбранного provider/external ID: сначала provider карточки, затем
+  другой Kinopoisk provider как fallback; default не переопределяет явный
+  пользовательский выбор. `lookupMovie` оставлен совместимым wrapper.
+  Providers лежат в `movie-lookup-providers/`: `kinopoisk.dev` работает при
+  `KINOPOISK_DEV_TOKEN`, `kinopoiskapiunofficial.tech` при
+  `KINOPOISK_UNOFFICIAL_TOKEN`; Wikipedia/Wikidata остается fallback без
+  токенов только для базовых метаданных.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
 - `notifications.ts` — уведомления для фильмов, комментариев и chat messages.
 - `chat.ts` — общий global thread, direct threads только с друзьями, polling data, read counters, replies/images/edit/delete.

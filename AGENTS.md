@@ -38,11 +38,13 @@ Compose project; при старте контейнера выполняется
 
 Runtime env: `/opt/ayurash/env/ay-movies.env`. Нужны `DATABASE_URL`,
 `SESSION_SECRET`, `WEB_ALLOWED_HOSTS` и `S3_*`. OpenAI не используется:
-`movie-lookup.ts` получает кандидатов из `kinopoisk.dev`, если задан
-`KINOPOISK_DEV_TOKEN`, затем из `kinopoiskapiunofficial.tech`, если задан
-`KINOPOISK_UNOFFICIAL_TOKEN`, и из Wikipedia/Wikidata как fallback. Токены
-провайдеров остаются только на сервере: не логируй, не сериализуй в браузер и
-не добавляй в примеры env.
+`lookupMovieCandidates` параллельно обращается к доступным Kinopoisk search
+providers, а затем упорядочивает результаты с `kinopoisk.dev` как default.
+Wikipedia/Wikidata остаются basic fallback. При загрузке деталей выбранный
+provider пробуется первым, затем второй Kinopoisk provider как fallback:
+default-порядок не переопределяет явный выбор пользователя. Токены провайдеров
+остаются только на сервере: не логируй, не сериализуй в браузер и не добавляй в
+примеры env.
 
 ## Архитектура
 
@@ -80,14 +82,15 @@ Runtime env: `/opt/ayurash/env/ay-movies.env`. Нужны `DATABASE_URL`,
 
 ## Метаданные сериалов и lookup
 
-- Поиск фильма двухэтапный: `lookupMovieCandidates` возвращает только легкие
-  карточки, а `loadMovieLookupDetails` загружает полные данные только после
-  выбора точного кандидата. Для сохраненного источника кнопка `Обновить` идет
-  напрямую по `metadataProvider` и `metadataExternalId`, без нового поиска.
-- `kinopoisk.dev` дает подробные сезоны и серии и является основным провайдером
-  при наличии токена. `kinopoiskapiunofficial.tech` используется fallback;
-  Wikipedia/Wikidata допускаются только для базовой информации и не содержат
-  подробностей эпизодов.
+- Поиск фильма двухэтапный: `lookupMovieCandidates` параллельно вызывает
+  доступные Kinopoisk searches, упорядочивает их с `kinopoisk.dev` как
+  preferred/default и возвращает только легкие карточки. Wikipedia/Wikidata
+  остаются basic fallback и не содержат подробностей эпизодов.
+- `loadMovieLookupDetails` загружает полные данные только после выбора точного
+  кандидата: сначала из provider выбранной карточки, затем из другого Kinopoisk
+  provider как fallback. `kinopoisk.dev` не переопределяет явный выбор
+  пользователя. Для сохраненного источника кнопка `Обновить` идет напрямую по
+  `metadataProvider` и `metadataExternalId`, без нового поиска.
 - Перед записью `normalizeSeriesMetadata()` удаляет невалидные/повторные номера,
   нормализует пустые строки и даты, сортирует сезоны и серии. Данные хранятся в
   `Movie.seriesSeasons` и `SeriesSeason.episodes`; списки и карточки читают
