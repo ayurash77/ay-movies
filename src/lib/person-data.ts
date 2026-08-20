@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 const boundedTextSchema = z.string().trim().min(1).max(300);
 
+export const PERSON_PROFILE_LIMITS = {
+    maxUrlLength: 2_048,
+} as const;
+
 function isHttpUrl(value: string) {
     try {
         const url = new URL(value);
@@ -17,7 +21,11 @@ function isIsoDate(value: string) {
     return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-const httpUrlSchema = z.string().trim().url().refine(isHttpUrl);
+const httpUrlSchema = z.string()
+    .trim()
+    .max(PERSON_PROFILE_LIMITS.maxUrlLength)
+    .url()
+    .refine(isHttpUrl);
 const dateSchema = z.string().refine(isIsoDate);
 
 export const personFilmographyEntrySchema = z.object({

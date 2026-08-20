@@ -65,6 +65,11 @@ test('person DTOs reject oversized data and non-http image URLs', () => {
         title: 'Фильм',
         posterUrl: 'file:///tmp/poster.jpg',
     } ]).success, false);
+    assert.equal(personFilmographySchema.safeParse([ {
+        externalId: '1',
+        title: 'Фильм',
+        posterUrl: `https://example.com/${'x'.repeat(2_049)}`,
+    } ]).success, false);
 });
 
 test('fresh cache is reused without provider request', async () => {
@@ -444,6 +449,15 @@ const malformedEnrichmentSummaries = [
     [ 'fractional year', { year: 2020.5 } ],
     [ 'out-of-range year', { year: 2201 } ],
     [ 'overlong type', { type: 'movie'.repeat(21) } ],
+    [ 'overlong name', { name: 'x'.repeat(301) } ],
+    [ 'overlong alternative name', { alternativeName: 'x'.repeat(301) } ],
+    [ 'overlong English name', { enName: 'x'.repeat(301) } ],
+    [ 'rating above range', { rating: { kp: 11 } } ],
+    [ 'rating below range', { rating: { kp: -1 } } ],
+    [ 'invalid preview URL', { poster: { previewUrl: 'ftp://example.com/poster.jpg' } } ],
+    [ 'invalid poster URL', { poster: { url: 'ftp://example.com/poster.jpg' } } ],
+    [ 'overlong preview URL', { poster: { previewUrl: `https://example.com/${'x'.repeat(2_049)}` } } ],
+    [ 'overlong poster URL', { poster: { url: `https://example.com/${'x'.repeat(2_049)}` } } ],
 ] as const;
 
 for (const [ caseName, malformedSummary ] of malformedEnrichmentSummaries) {

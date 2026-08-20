@@ -1,6 +1,8 @@
+import { z } from 'zod';
+
 import type { MovieKind } from '@/lib/movie-data';
 import {
-    personFilmographyEntrySchema,
+    PERSON_PROFILE_LIMITS,
     personProfileSchema,
     type PersonProfile,
     type PersonProfileLoadResult,
@@ -107,6 +109,30 @@ type KinopoiskSeasonResponse = {
 
 const DEFAULT_BASE_URL = 'https://api.kinopoisk.dev';
 
+const rawSummaryTextSchema = z.string().trim().max(300).nullish();
+const rawSummaryRatingSchema = z.number().finite().min(0).max(10).nullish();
+const rawSummaryUrlSchema = z.string()
+    .trim()
+    .max(PERSON_PROFILE_LIMITS.maxUrlLength)
+    .url()
+    .refine(isHttpUrl)
+    .nullish();
+const rawMovieSummarySchema = z.object({
+    name: rawSummaryTextSchema,
+    alternativeName: rawSummaryTextSchema,
+    enName: rawSummaryTextSchema,
+    type: z.string().trim().min(1).max(100).nullish(),
+    year: z.number().int().min(1800).max(2200).nullish(),
+    poster: z.object({
+        previewUrl: rawSummaryUrlSchema,
+        url: rawSummaryUrlSchema,
+    }).nullish(),
+    rating: z.object({
+        kp: rawSummaryRatingSchema,
+        imdb: rawSummaryRatingSchema,
+    }).nullish(),
+});
+
 function text(value: unknown) {
     return typeof value === 'string' ? value.trim() : '';
 }
@@ -127,10 +153,6 @@ function array(value: unknown) {
 
 function nullableString(value: unknown) {
     return value == null || typeof value === 'string';
-}
-
-function nullableNumber(value: unknown) {
-    return value == null || (typeof value === 'number' && Number.isFinite(value));
 }
 
 function personMovieShape(value: unknown) {
@@ -161,45 +183,7 @@ function validPersonPayload(value: unknown): (Record<string, unknown> & { movies
 function movieSummaryShape(value: unknown) {
     const data = record(value);
     const id = data ? externalId(data.id) : null;
-    if (!data || !id) return false;
-    if (
-        !nullableString(data.name)
-        || !nullableString(data.alternativeName)
-        || !nullableString(data.enName)
-        || !nullableString(data.type)
-        || !nullableNumber(data.year)
-    ) {
-        return false;
-    }
-
-    const poster = data.poster == null ? null : record(data.poster);
-    if (data.poster != null && (!poster
-        || !nullableString(poster.previewUrl)
-        || !nullableString(poster.url))) {
-        return false;
-    }
-
-    const ratingData = data.rating == null ? null : record(data.rating);
-    if (data.rating != null && !(
-        ratingData
-        && nullableNumber(ratingData.kp)
-        && nullableNumber(ratingData.imdb)
-    )) {
-        return false;
-    }
-
-    const posterUrl = text(poster?.previewUrl) || text(poster?.url);
-    return personFilmographyEntrySchema.safeParse({
-        externalId: id,
-        title: boundedText(data.name)
-            || boundedText(data.alternativeName)
-            || boundedText(data.enName)
-            || 'movie',
-        year: data.year ?? null,
-        posterUrl: posterUrl && isHttpUrl(posterUrl) ? posterUrl : null,
-        type: boundedText(data.type) || null,
-        rating: movieRating(data as KinopoiskMovie),
-    }).success;
+    return Boolean(id && rawMovieSummarySchema.safeParse(data).success);
 }
 
 function normalize(value: string) {
