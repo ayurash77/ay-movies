@@ -76,13 +76,13 @@ const cast = [
 
 test('normalizes valid ratings and removes invalid score or vote values', () => {
     assert.deepEqual(normalizeExternalRatings({
-        kinopoisk: { value: 7.8, votes: 100 },
-        imdb: { value: 8.1, votes: -1 },
-        russianCritics: { value: 101, votes: 5 },
+        kinopoisk: { value: 85, votes: 100 },
+        imdb: { value: 42, votes: 200 },
+        russianCritics: { value: 85, votes: 5 },
     }), {
-        kinopoisk: { value: 7.8, votes: 100 },
+        kinopoisk: null,
         imdb: null,
-        russianCritics: null,
+        russianCritics: { value: 85, votes: 5 },
     });
 });
 
@@ -144,13 +144,42 @@ test('deduplicates cast by provider identity and preserves source order', () => 
 
 test('partial rating refresh preserves existing provider values', () => {
     assert.deepEqual(mergeExternalRatings(
-        { kinopoisk: { value: 7.8, votes: 100 }, imdb: { value: 8.1, votes: 200 }, russianCritics: null },
-        { kinopoisk: { value: 7.9, votes: 110 }, imdb: null, russianCritics: null },
+        {
+            kinopoisk: { value: 7.8, votes: 100 },
+            imdb: { value: 8.1, votes: 200 },
+            russianCritics: { value: 70, votes: 10 },
+        },
+        {
+            kinopoisk: { value: 85, votes: 110 },
+            imdb: { value: 42, votes: 210 },
+            russianCritics: { value: 85, votes: 12 },
+        },
     ), {
-        kinopoisk: { value: 7.9, votes: 110 },
+        kinopoisk: { value: 7.8, votes: 100 },
         imdb: { value: 8.1, votes: 200 },
-        russianCritics: null,
+        russianCritics: { value: 85, votes: 12 },
     });
+});
+
+test('rich metadata writer skips invalid ten-point ratings and saves valid critic percent', async () => {
+    const { calls, tx } = createWriter();
+
+    await writeMovieRichMetadata(tx, 'movie-1', {
+        importSucceeded: true,
+        externalRatings: {
+            kinopoisk: { value: 85, votes: 100 },
+            imdb: { value: 42, votes: 200 },
+            russianCritics: { value: 85, votes: 12 },
+        },
+    });
+
+    assert.deepEqual(calls.movieUpdates, [ {
+        where: { id: 'movie-1' },
+        data: {
+            russianCriticsPercent: 85,
+            russianCriticsVotes: 12,
+        },
+    } ]);
 });
 
 test('rich metadata writer does nothing after a failed detailed import', async () => {

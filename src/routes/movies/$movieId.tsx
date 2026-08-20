@@ -253,7 +253,7 @@ function MoviePage() {
                 actions={headerActions}
             />
 
-            <div className="flex flex-col gap-8 md:flex-row">
+            <div className="flex flex-col gap-8 lg:flex-row">
                 <div className="w-full max-w-72 shrink-0 self-start overflow-hidden rounded-lg border border-border">
                     <MoviePoster posterUrl={movie.posterUrl} title={movie.title}/>
                 </div>

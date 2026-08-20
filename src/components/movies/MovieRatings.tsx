@@ -6,6 +6,20 @@ import { formatRating } from '@/lib/utils';
 
 const voteFormatter = new Intl.NumberFormat('ru-RU');
 
+function formatVotes(votes: number) {
+    const lastTwoDigits = votes % 100;
+    const lastDigit = votes % 10;
+    const noun = lastTwoDigits >= 11 && lastTwoDigits <= 14
+        ? 'голосов'
+        : lastDigit === 1
+            ? 'голос'
+            : lastDigit >= 2 && lastDigit <= 4
+                ? 'голоса'
+                : 'голосов';
+
+    return `${voteFormatter.format(votes)} ${noun}`;
+}
+
 type MovieRatingsProps = {
     externalRatings: ExternalRatings;
     avgRating: number;
@@ -23,7 +37,7 @@ function RatingTile({ label, value, votes }: { label: string; value: string; vot
                 <div className="text-xl font-semibold tabular-nums">{value}</div>
                 {votes != null ? (
                     <div className="text-xs tabular-nums text-muted-foreground">
-                        {voteFormatter.format(votes)} голосов
+                        {formatVotes(votes)}
                     </div>
                 ) : null}
             </div>
@@ -64,11 +78,11 @@ export function MovieRatings({
                         votes={externalRatings.russianCritics.votes}
                     />
                 ) : null}
-                <div className="flex min-h-24 flex-col justify-between gap-2 bg-card p-3">
+                <div className="col-span-full flex min-h-24 flex-col justify-between gap-2 bg-card p-3 sm:col-span-2">
                     <div className="flex items-start justify-between gap-2">
                         <span className="text-xs font-medium text-muted-foreground">AY Movies</span>
                         <span className="text-xs tabular-nums text-muted-foreground">
-                            {ratingCount > 0 ? `${voteFormatter.format(ratingCount)} голосов` : 'Нет оценок'}
+                            {ratingCount > 0 ? formatVotes(ratingCount) : 'Нет оценок'}
                         </span>
                     </div>
                     <div className="flex flex-col gap-1.5">
@@ -76,7 +90,7 @@ export function MovieRatings({
                             {ratingCount > 0 ? `${formatRating(avgRating)} / 5` : '—'}
                         </span>
                         {isAuthed ? (
-                            <RatingStars value={myRating ?? 0} onRate={onRate}/>
+                            <RatingStars value={myRating ?? 0} onRate={onRate} size="lg" className="gap-0"/>
                         ) : (
                             <Link to="/sign-in" className="text-xs text-primary hover:underline">
                                 Войти и оценить

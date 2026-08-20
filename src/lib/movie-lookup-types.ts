@@ -104,15 +104,28 @@ export const seriesMetadataSnapshotSchema = z
         }
     });
 
-export const externalRatingSchema = z.object({
-    value: z.number().finite().min(0).max(100),
-    votes: z.number().int().min(0).max(2_000_000_000).nullish(),
+const externalRatingVotesSchema = z.number().int().min(0).max(2_000_000_000).nullish();
+
+export const tenPointExternalRatingSchema = z.object({
+    value: z.number().finite().min(0).max(10),
+    votes: externalRatingVotesSchema,
 });
 
+export const percentExternalRatingSchema = z.object({
+    value: z.number().finite().min(0).max(100),
+    votes: externalRatingVotesSchema,
+});
+
+export const externalRatingSchemas = {
+    kinopoisk: tenPointExternalRatingSchema,
+    imdb: tenPointExternalRatingSchema,
+    russianCritics: percentExternalRatingSchema,
+} as const;
+
 export const externalRatingsSchema = z.object({
-    kinopoisk: externalRatingSchema.nullish(),
-    imdb: externalRatingSchema.nullish(),
-    russianCritics: externalRatingSchema.nullish(),
+    kinopoisk: externalRatingSchemas.kinopoisk.nullish(),
+    imdb: externalRatingSchemas.imdb.nullish(),
+    russianCritics: externalRatingSchemas.russianCritics.nullish(),
 });
 
 export const movieCastMemberSchema = z.object({

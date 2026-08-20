@@ -33,17 +33,23 @@ export function RatingStars({ value, onRate, size = 'sm', className }: RatingSta
                         onClick={() => onRate?.(star)}
                         onMouseEnter={interactive ? () => setHovered(star) : undefined}
                         className={cn(
-                            'relative p-0 bg-transparent border-0',
-                            interactive ? 'cursor-pointer transition-transform hover:scale-115' : 'cursor-default',
+                            'relative grid place-items-center border-0 bg-transparent p-0',
+                            interactive
+                                ? 'size-11 shrink-0 cursor-pointer transition-transform hover:scale-110'
+                                : 'cursor-default',
                         )}
+                        role={interactive ? 'radio' : undefined}
+                        aria-checked={interactive ? value === star : undefined}
                         aria-label={`${star} из 5`}
                     >
-                        <Star className={cn(starSize, 'text-muted-foreground/40')}/>
-                        <span
-                            className="absolute inset-0 overflow-hidden"
-                            style={{ width: `${fillRatio * 100}%` }}
-                        >
-                            <Star className={cn(starSize, 'fill-star text-star')}/>
+                        <span className="relative block">
+                            <Star className={cn(starSize, 'text-muted-foreground/40')}/>
+                            <span
+                                className="absolute inset-0 overflow-hidden"
+                                style={{ width: `${fillRatio * 100}%` }}
+                            >
+                                <Star className={cn(starSize, 'fill-star text-star')}/>
+                            </span>
                         </span>
                     </button>
                 );

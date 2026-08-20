@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+    externalRatingsSchema,
     movieLookupCandidateSchema,
     movieLookupDetailsSchema,
     type MovieLookupCandidate,
@@ -85,6 +86,19 @@ test('movie lookup candidate schema accepts provider metadata', () => {
     };
 
     assert.deepEqual(movieLookupCandidateSchema.parse(candidate), candidate);
+});
+
+test('external rating schema enforces provider-specific ranges', () => {
+    assert.equal(externalRatingsSchema.safeParse({
+        kinopoisk: { value: 10, votes: 1 },
+        imdb: { value: 0, votes: 2 },
+        russianCritics: { value: 100, votes: 3 },
+    }).success, true);
+    assert.equal(externalRatingsSchema.safeParse({
+        kinopoisk: { value: 85, votes: 1 },
+        imdb: { value: 42, votes: 2 },
+        russianCritics: { value: 85, votes: 3 },
+    }).success, false);
 });
 
 test('movie lookup exposes candidate entrypoint and keeps compatibility wrapper', () => {
@@ -176,8 +190,8 @@ test('kinopoisk details map ratings, votes, and rich cast', () => {
 
 test('kinopoisk rich metadata rejects invalid fields and duplicate cast', () => {
     const rich = mapKinopoiskRichMetadata({
-        rating: { kp: Number.POSITIVE_INFINITY, imdb: -1, russianFilmCritics: 101 },
-        votes: { kp: -1, imdb: 2.5, russianFilmCritics: 2_000_000_001 },
+        rating: { kp: 85, imdb: 42, russianFilmCritics: 85 },
+        votes: { kp: 10, imdb: 20, russianFilmCritics: 30 },
         persons: [
             { id: 1, name: 'Первый актер', enProfession: 'actor', photo: 'ftp://example.com/first.jpg' },
             { id: 1, name: 'Дубликат', enProfession: 'actor', photo: 'https://example.com/duplicate.jpg' },
@@ -194,7 +208,7 @@ test('kinopoisk rich metadata rejects invalid fields and duplicate cast', () => 
     assert.deepEqual(rich.externalRatings, {
         kinopoisk: null,
         imdb: null,
-        russianCritics: null,
+        russianCritics: { value: 85, votes: 30 },
     });
     assert.equal(rich.cast.length, 100);
     assert.deepEqual(rich.cast[0], {

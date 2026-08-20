@@ -8,7 +8,7 @@ import {
     type PersonProfileLoadResult,
 } from '@/lib/person-data';
 import {
-    externalRatingSchema,
+    externalRatingSchemas,
     movieCastMemberSchema,
     movieLookupDetailsSchema,
     type ExternalRatings,
@@ -283,14 +283,18 @@ function movieRating(movie: KinopoiskMovie | undefined) {
         : null;
 }
 
-function rating(value: number | null | undefined, votes: number | null | undefined) {
+function rating(
+    provider: keyof typeof externalRatingSchemas,
+    value: number | null | undefined,
+    votes: number | null | undefined,
+) {
     const validVotes = typeof votes === 'number'
         && Number.isInteger(votes)
         && votes >= 0
         && votes <= 2_000_000_000
         ? votes
         : null;
-    const parsed = externalRatingSchema.safeParse({ value, votes: validVotes });
+    const parsed = externalRatingSchemas[provider].safeParse({ value, votes: validVotes });
     return parsed.success ? parsed.data : null;
 }
 
@@ -353,9 +357,13 @@ export function mapKinopoiskRichMetadata(movie: KinopoiskMovie): {
     cast: MovieCastMember[];
 } {
     const externalRatings = {
-        kinopoisk: rating(movie.rating?.kp, movie.votes?.kp),
-        imdb: rating(movie.rating?.imdb, movie.votes?.imdb),
-        russianCritics: rating(movie.rating?.russianFilmCritics, movie.votes?.russianFilmCritics),
+        kinopoisk: rating('kinopoisk', movie.rating?.kp, movie.votes?.kp),
+        imdb: rating('imdb', movie.rating?.imdb, movie.votes?.imdb),
+        russianCritics: rating(
+            'russianCritics',
+            movie.rating?.russianFilmCritics,
+            movie.votes?.russianFilmCritics,
+        ),
     };
     const seenIds = new Set<string>();
     const cast: MovieCastMember[] = [];

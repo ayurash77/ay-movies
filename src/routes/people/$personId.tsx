@@ -31,7 +31,15 @@ function personAge(birthDate: string | null, deathDate: string | null) {
     return age >= 0 ? age : null;
 }
 
-function PersonPortrait({ person }: { person: PersonProfile }) {
+type PersonPageResult =
+    | { ok: true; person: PersonProfile }
+    | { ok: false; error: string };
+
+export function personBackAction(historyLength: number) {
+    return historyLength > 1 ? 'back' as const : 'home' as const;
+}
+
+export function PersonPortrait({ person }: { person: PersonProfile }) {
     const [ failed, setFailed ] = useState(false);
 
     if (!person.photoUrl || failed) {
@@ -91,6 +99,17 @@ function PersonSummary({ person }: { person: PersonProfile }) {
     );
 }
 
+export function PersonPageContent({ result }: { result: PersonPageResult }) {
+    return result.ok ? (
+        <>
+            <PersonSummary person={result.person}/>
+            <PersonFilmography entries={result.person.filmography}/>
+        </>
+    ) : (
+        <p className="py-16 text-center text-sm text-muted-foreground">{result.error}</p>
+    );
+}
+
 export const Route = createFileRoute('/people/$personId')({
     loader: async ({ params }) => getPerson({ data: { personId: params.personId } }),
     component: PersonPage,
@@ -106,7 +125,7 @@ function PersonPage() {
             size="icon"
             aria-label="Назад"
             onClick={() => {
-                if (window.history.length > 1) window.history.back();
+                if (personBackAction(window.history.length) === 'back') window.history.back();
                 else void navigate({ to: '/' });
             }}
         >
@@ -120,14 +139,7 @@ function PersonPage() {
                 title={result.ok ? result.person.name : 'Персона'}
                 leading={headerLeading}
             />
-            {result.ok ? (
-                <>
-                    <PersonSummary person={result.person}/>
-                    <PersonFilmography entries={result.person.filmography}/>
-                </>
-            ) : (
-                <p className="py-16 text-center text-sm text-muted-foreground">{result.error}</p>
-            )}
+            <PersonPageContent result={result}/>
         </div>
     );
 }

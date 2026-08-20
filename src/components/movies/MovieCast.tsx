@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { UserRound, Users } from 'lucide-react';
 
@@ -31,6 +31,7 @@ function CastPortrait({ member }: { member: MovieCastPerson }) {
 
 export function MovieCast({ cast, legacyStarring }: { cast: MovieCastPerson[]; legacyStarring: string[] }) {
     const [ expanded, setExpanded ] = useState(false);
+    const castGridId = useId();
 
     if (cast.length === 0) {
         if (legacyStarring.length === 0) return null;
@@ -47,7 +48,7 @@ export function MovieCast({ cast, legacyStarring }: { cast: MovieCastPerson[]; l
         );
     }
 
-    const visibleCast = expanded ? cast : cast.slice(0, 8);
+    const visibleCast = expanded ? cast : cast.slice(0, INITIAL_CAST_COUNT);
 
     return (
         <section className="flex flex-col gap-3">
@@ -57,12 +58,19 @@ export function MovieCast({ cast, legacyStarring }: { cast: MovieCastPerson[]; l
                     Актёры
                 </h2>
                 {cast.length > INITIAL_CAST_COUNT ? (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((value) => !value)}>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-expanded={expanded}
+                        aria-controls={castGridId}
+                        onClick={() => setExpanded((value) => !value)}
+                    >
                         {expanded ? 'Свернуть' : 'Все'}
                     </Button>
                 ) : null}
             </div>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div id={castGridId} className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-5">
                 {visibleCast.map((member) => (
                     <Link
                         key={member.personId}

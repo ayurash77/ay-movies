@@ -1,5 +1,5 @@
 import {
-    externalRatingSchema,
+    externalRatingSchemas,
     movieCastMemberSchema,
     type ExternalRatings,
     type MovieCastMember,
@@ -11,8 +11,8 @@ type NormalizedExternalRatings = Record<RatingProvider, ExternalRating | null>;
 
 const ratingProviders: readonly RatingProvider[] = [ 'kinopoisk', 'imdb', 'russianCritics' ];
 
-function normalizeRating(value: unknown): ExternalRating | null {
-    const parsed = externalRatingSchema.safeParse(value);
+function normalizeRating(provider: RatingProvider, value: unknown): ExternalRating | null {
+    const parsed = externalRatingSchemas[provider].safeParse(value);
     if (!parsed.success) return null;
 
     return {
@@ -28,7 +28,7 @@ export function normalizeExternalRatings(value: unknown): NormalizedExternalRati
 
     return Object.fromEntries(ratingProviders.map((provider) => [
         provider,
-        normalizeRating(ratings[provider]),
+        normalizeRating(provider, ratings[provider]),
     ])) as NormalizedExternalRatings;
 }
 
