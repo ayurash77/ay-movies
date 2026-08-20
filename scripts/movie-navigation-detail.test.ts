@@ -36,12 +36,22 @@ test('movie cards preserve the current catalog URL for detail back navigation', 
 
 test('series detail page has compact about and seasons tabs', () => {
     const detail = read('src/routes/movies/$movieId.tsx');
+    const seasons = read('src/components/movies/SeriesSeasons.tsx');
 
     assert.match(detail, /Tabs/);
     assert.match(detail, /О сериале/);
     assert.match(detail, /Сезоны и серии/);
-    assert.match(detail, /seasonEpisodes/);
-    assert.match(detail, /Серия \{episode\}/);
+    assert.match(detail, /<SeriesSeasons movie=\{movie\}\/>/);
+    assert.doesNotMatch(detail, /function seasonEpisodes/);
+
+    assert.match(seasons, /overflow-x-auto/);
+    assert.match(seasons, /size-10/);
+    assert.match(seasons, /aria-pressed/);
+    assert.match(seasons, /Intl\.DateTimeFormat\('ru-RU'/);
+    assert.match(seasons, /originalName/);
+    assert.match(seasons, /description/);
+    assert.match(seasons, /stillUrl/);
+    assert.match(seasons, /Серия \$\{number\}/);
 });
 
 test('app header relies on backdrop instead of a bottom border line', () => {

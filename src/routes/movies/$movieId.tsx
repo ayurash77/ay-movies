@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router';
 import { ArrowLeft, Clock, Clapperboard, ExternalLink, Globe, Pencil, PlayCircle, Tv, User, Users } from 'lucide-react';
 import { toast } from 'sonner';
@@ -8,6 +8,7 @@ import { PageTitle } from '@/components/AppTitle';
 import { CommentsSection } from '@/components/movies/CommentsSection';
 import { MoviePoster } from '@/components/movies/MoviePoster';
 import { RatingStars } from '@/components/movies/RatingStars';
+import { SeriesSeasons } from '@/components/movies/SeriesSeasons';
 import { WatchButtons } from '@/components/movies/WatchButtons';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -58,14 +59,6 @@ function watchLinkLabel(url: string) {
 function safeReturnPath(value?: string) {
     if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
     return value;
-}
-
-function seasonEpisodes(movie: Pick<MovieDetails, 'seasonsCount' | 'episodesPerSeason'>) {
-    const seasonCount = Math.max(movie.seasonsCount ?? 0, movie.episodesPerSeason.length);
-    return Array.from({ length: seasonCount }, (_, index) => ({
-        season: index + 1,
-        episodes: movie.episodesPerSeason[index] ?? null,
-    }));
 }
 
 function TrailerSection({ movie }: { movie: Pick<MovieDetails, 'title' | 'trailerUrls'> }) {
@@ -169,67 +162,6 @@ function AboutSection({ movie, displayGenres }: { movie: MovieDetails; displayGe
     );
 }
 
-function SeasonsSection({ movie }: { movie: MovieDetails }) {
-    const seasons = seasonEpisodes(movie);
-    const [ activeSeason, setActiveSeason ] = useState(seasons[0]?.season ?? 1);
-    const active = seasons.find((season) => season.season === activeSeason) ?? seasons[0];
-
-    if (!seasons.length) {
-        return (
-            <p className="py-6 text-sm text-muted-foreground">
-                Сезоны пока не заполнены.
-            </p>
-        );
-    }
-
-    const episodeCount = active?.episodes ?? 0;
-
-    return (
-        <section className="flex flex-col gap-5">
-            <div className="flex gap-2 overflow-x-auto pb-1">
-                {seasons.map((season) => (
-                    <Button
-                        key={season.season}
-                        type="button"
-                        variant={season.season === activeSeason ? 'default' : 'ghost'}
-                        className="size-10 shrink-0 px-0"
-                        onClick={() => setActiveSeason(season.season)}
-                    >
-                        {season.season}
-                    </Button>
-                ))}
-            </div>
-
-            <div className="flex flex-col gap-4">
-                <h2 className="text-lg font-semibold">
-                    {active.season} сезон{episodeCount ? `, ${episodeCount} серий` : ''}
-                </h2>
-                {episodeCount ? (
-                    <ol className="flex flex-col gap-5">
-                        {Array.from({ length: episodeCount }, (_, index) => {
-                            const episode = index + 1;
-                            return (
-                                <li key={episode} className="flex flex-col gap-1">
-                                    <span className="text-base font-semibold">
-                                        {episode}. Серия {episode}
-                                    </span>
-                                    <span className="text-sm text-muted-foreground">
-                                        Сезон {active.season}
-                                    </span>
-                                </li>
-                            );
-                        })}
-                    </ol>
-                ) : (
-                    <p className="text-sm text-muted-foreground">
-                        Количество серий пока не заполнено.
-                    </p>
-                )}
-            </div>
-        </section>
-    );
-}
-
 function SeriesTabs({ movie, displayGenres }: { movie: MovieDetails; displayGenres: string[] }) {
     return (
         <Tabs defaultValue="about" className="gap-5">
@@ -251,7 +183,7 @@ function SeriesTabs({ movie, displayGenres }: { movie: MovieDetails; displayGenr
                 <AboutSection movie={movie} displayGenres={displayGenres}/>
             </TabsContent>
             <TabsContent value="seasons">
-                <SeasonsSection movie={movie}/>
+                <SeriesSeasons movie={movie}/>
             </TabsContent>
         </Tabs>
     );
