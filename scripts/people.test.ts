@@ -898,3 +898,87 @@ test('failed recovery does not return malformed persisted profile', async () => 
     });
     assert.deepEqual(calls.updates, []);
 });
+
+for (const [ caseName, malformedName ] of [
+    [ 'empty persisted name', '   ' ],
+    [ 'overlong persisted name', 'x'.repeat(301) ],
+] as const) {
+    test(`provider refresh recovers a profile with ${caseName}`, async () => {
+        const malformedPerson = {
+            id: 'person-local-42',
+            provider: 'kinopoisk-dev',
+            externalId: '42',
+            name: malformedName,
+            originalName: null,
+            photoUrl: null,
+            sex: null,
+            growthCm: null,
+            birthDate: null,
+            deathDate: null,
+            birthPlace: [],
+            professions: [],
+            facts: [],
+            filmography: cachedProfile.filmography,
+            profileUpdatedAt: new Date('2026-08-19T12:00:00.000Z'),
+        };
+        const { calls, store } = createStore(malformedPerson);
+        let loads = 0;
+
+        const result = await resolvePersonProfile({
+            personId: 'person-local-42',
+            store,
+            now: NOW,
+            loadFresh: async () => {
+                loads += 1;
+                return { profile: cachedProfile, complete: true };
+            },
+        });
+
+        assert.equal(result.ok, true);
+        if (!result.ok) return;
+        assert.equal(loads, 1);
+        assert.equal(result.source, 'provider');
+        assert.equal(result.person.name, cachedProfile.name);
+        assert.equal(calls.updates.length, 1);
+        assert.equal(malformedPerson.name, cachedProfile.name);
+    });
+}
+
+test('failed provider recovery does not expose malformed persisted name', async () => {
+    const malformedPerson = {
+        id: 'person-local-42',
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: '   ',
+        originalName: null,
+        photoUrl: null,
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [],
+        facts: [],
+        filmography: cachedProfile.filmography,
+        profileUpdatedAt: new Date('2026-08-19T12:00:00.000Z'),
+    };
+    const { calls, store } = createStore(malformedPerson);
+    let loads = 0;
+
+    const result = await resolvePersonProfile({
+        personId: 'person-local-42',
+        store,
+        now: NOW,
+        loadFresh: async () => {
+            loads += 1;
+            return null;
+        },
+    });
+
+    assert.equal(loads, 1);
+    assert.deepEqual(result, {
+        ok: false,
+        error: 'Профиль персоны временно недоступен',
+    });
+    assert.deepEqual(calls.updates, []);
+});

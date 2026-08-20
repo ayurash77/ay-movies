@@ -11,6 +11,12 @@ import {
 import { resolvePersonSnapshot } from '@/lib/person-cache';
 
 const PERSON_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const personProfileIdentitySchema = personProfileSchema.pick({
+    provider: true,
+    externalId: true,
+});
+
+type PersonProfileIdentity = z.infer<typeof personProfileIdentitySchema>;
 
 type PersonProfileRow = {
     id: string;
@@ -117,21 +123,10 @@ function compactProfile(row: PersonProfileRow, filmography: PersonFilmographyEnt
     return parsed.success ? parsed.data : null;
 }
 
-function recoveryProfile(row: PersonProfileRow): PersonProfile | null {
-    const parsed = personProfileSchema.safeParse({
+function recoveryIdentity(row: PersonProfileRow): PersonProfileIdentity | null {
+    const parsed = personProfileIdentitySchema.safeParse({
         provider: row.provider,
         externalId: row.externalId,
-        name: row.name,
-        originalName: null,
-        photoUrl: null,
-        sex: null,
-        growthCm: null,
-        birthDate: null,
-        deathDate: null,
-        birthPlace: [],
-        professions: [],
-        facts: [],
-        filmography: [],
     });
     return parsed.success ? parsed.data : null;
 }
@@ -159,24 +154,29 @@ function mergePartialFilmography(
     return [ ...merged, ...cached.filter((entry) => !freshIds.has(entry.externalId)) ];
 }
 
-function mergeFreshProfile(compact: PersonProfile, fresh: PersonProfile, complete: boolean) {
+function mergeFreshProfile(
+    compact: PersonProfile | null,
+    identity: PersonProfileIdentity,
+    fresh: PersonProfile,
+    complete: boolean,
+) {
     const parsed = personProfileSchema.safeParse({
         ...fresh,
-        provider: compact.provider,
-        externalId: compact.externalId,
-        name: fresh.name || compact.name,
-        originalName: fresh.originalName ?? compact.originalName,
-        photoUrl: fresh.photoUrl ?? compact.photoUrl,
-        sex: fresh.sex ?? compact.sex,
-        growthCm: fresh.growthCm ?? compact.growthCm,
-        birthDate: fresh.birthDate ?? compact.birthDate,
-        deathDate: fresh.deathDate ?? compact.deathDate,
-        birthPlace: fresh.birthPlace.length ? fresh.birthPlace : compact.birthPlace,
-        professions: fresh.professions.length ? fresh.professions : compact.professions,
-        facts: fresh.facts.length ? fresh.facts : compact.facts,
+        provider: identity.provider,
+        externalId: identity.externalId,
+        name: fresh.name,
+        originalName: fresh.originalName ?? compact?.originalName ?? null,
+        photoUrl: fresh.photoUrl ?? compact?.photoUrl ?? null,
+        sex: fresh.sex ?? compact?.sex ?? null,
+        growthCm: fresh.growthCm ?? compact?.growthCm ?? null,
+        birthDate: fresh.birthDate ?? compact?.birthDate ?? null,
+        deathDate: fresh.deathDate ?? compact?.deathDate ?? null,
+        birthPlace: fresh.birthPlace.length ? fresh.birthPlace : (compact?.birthPlace ?? []),
+        professions: fresh.professions.length ? fresh.professions : (compact?.professions ?? []),
+        facts: fresh.facts.length ? fresh.facts : (compact?.facts ?? []),
         filmography: complete
             ? fresh.filmography
-            : mergePartialFilmography(compact.filmography, fresh.filmography),
+            : mergePartialFilmography(compact?.filmography ?? [], fresh.filmography),
     });
     return parsed.success ? parsed.data : null;
 }
@@ -228,8 +228,8 @@ export async function resolvePersonProfile({
 
     const parsedFilmography = personFilmographySchema.safeParse(row.filmography);
     const compact = compactProfile(row, parsedFilmography.success ? parsedFilmography.data : []);
-    const profileBase = compact ?? recoveryProfile(row);
-    if (!profileBase) {
+    const identity = compact ?? recoveryIdentity(row);
+    if (!identity) {
         return { ok: false as const, error: 'Профиль персоны временно недоступен' };
     }
 
@@ -243,7 +243,7 @@ export async function resolvePersonProfile({
         loadFresh: async () => {
             const fresh = await loadFresh(row.provider, row.externalId);
             if (!fresh) return null;
-            const profile = mergeFreshProfile(profileBase, fresh.profile, fresh.complete);
+            const profile = mergeFreshProfile(compact, identity, fresh.profile, fresh.complete);
             return profile ? { profile, complete: fresh.complete } : null;
         },
     });
