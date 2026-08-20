@@ -21,6 +21,7 @@
 
 - Кнопка `+` в header задается в `src/routes/__root.tsx`, но визуально должна совпадать по высоте с `Button size="sm"` из sidebar: `h-8`, залитый default variant, icon-only, без текста.
 - На `/` кнопка открывает dropdown выбора типа. На `/movies?kind=...` ведет сразу в `/movies/new` с этим `kind`.
+- Page-specific кнопки шапки идут через `<PageTitle leading actions />`; правые icon-only действия должны визуально совпадать с header `+`.
 
 ## Profile/Theme Dialogs
 

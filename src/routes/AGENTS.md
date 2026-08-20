@@ -15,6 +15,7 @@
 - `__root.tsx` отвечает за sidebar, header, profile/theme dialogs, Toaster и специальный layout `/chat`.
 - Для `/chat` root фиксируется по высоте viewport: `h-svh overflow-hidden`; не возвращай общий body/page scroll для активного диалога.
 - Header title приходит из `AppTitleProvider`.
+- Для page-specific кнопок в шапке используй props `leading` и `actions` у `<PageTitle />`; не рисуй отдельную строку с back/edit внутри страницы без необходимости.
 - На основных страницах каталога header показывает залитую icon-only кнопку добавления `h-8`: `/` открывает dropdown выбора типа, `/movies?kind=...` ведет сразу к добавлению этого типа.
 - Header использует backdrop/тень без нижнего `border-b`.
 
@@ -23,6 +24,7 @@
 - Каталог фильтрует выбранный жанр через URL search param `genre`; счетчик в header берется из `searchMovies().total`, не из клиентского callback.
 - Detail `/movies/$movieId` принимает search param `from`; back button ведет в этот безопасный внутренний URL или `/`.
 - Для сериалов detail показывает вкладки `О сериале` и `Сезоны и серии`; реальные названия эпизодов пока не хранятся, поэтому список строится из `episodesPerSeason`.
+- Edit `/movies/$movieId/edit` без обрамляющей Card-панели; кнопка `Обновить данные` подтягивает текущий `lookupMovie` и ремонтирует `MovieForm` через `formVersion`.
 
 ## Dashboard/Friends
 

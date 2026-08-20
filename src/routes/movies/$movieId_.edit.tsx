@@ -1,13 +1,58 @@
+import { useState } from 'react';
 import { createFileRoute, Link, notFound, redirect, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { PageTitle } from '@/components/AppTitle';
-import { Card, CardContent } from '@/components/ui/card';
 import { MovieForm } from '@/components/movies/MovieForm';
+import type { MovieFormFields } from '@/lib/movie-data';
 import { getMovie, updateMovie } from '@/server/movies';
+import { lookupMovie, type MovieLookup } from '@/server/movie-lookup';
 import { normalizeGenreOptions } from '@/lib/genre-groups';
+
+function movieToFormDefaults(movie: Awaited<ReturnType<typeof getMovie>>): Partial<MovieFormFields> {
+    if (!movie) return {};
+    return {
+        kind: movie.kind,
+        title: movie.title,
+        year: movie.year,
+        country: movie.country,
+        description: movie.description,
+        posterUrl: movie.posterUrl ?? '',
+        trailerUrls: movie.trailerUrls,
+        watchLinks: movie.watchLinks,
+        director: movie.director ?? '',
+        genres: normalizeGenreOptions(movie.genres),
+        starring: movie.starring.join(', '),
+        durationMin: movie.durationMin ?? '',
+        seasonsCount: movie.seasonsCount ?? '',
+        episodesPerSeason: movie.episodesPerSeason.join(', '),
+    };
+}
+
+function mergeLookupDefaults(
+    current: Partial<MovieFormFields>,
+    lookup: MovieLookup,
+): Partial<MovieFormFields> {
+    return {
+        ...current,
+        kind: lookup.kind ?? current.kind,
+        title: lookup.title ?? current.title,
+        year: lookup.year ?? current.year,
+        country: lookup.country ?? current.country,
+        description: lookup.description ?? current.description,
+        posterUrl: lookup.posterUrl ?? current.posterUrl,
+        director: lookup.director ?? current.director,
+        genres: lookup.genres?.length ? normalizeGenreOptions(lookup.genres) : current.genres,
+        starring: lookup.starring?.length ? lookup.starring.join(', ') : current.starring,
+        durationMin: lookup.durationMin ?? current.durationMin,
+        seasonsCount: lookup.seasonsCount ?? current.seasonsCount,
+        episodesPerSeason: lookup.episodesPerSeason?.length
+            ? lookup.episodesPerSeason.join(', ')
+            : current.episodesPerSeason,
+    };
+}
 
 export const Route = createFileRoute('/movies/$movieId_/edit')({
     beforeLoad: ({ context, params }) => {
@@ -30,6 +75,30 @@ function EditMoviePage() {
     const movie = Route.useLoaderData();
     const navigate = useNavigate();
     const pageTitle = `Редактировать: ${movie.title}`;
+    const [ formDefaults, setFormDefaults ] = useState<Partial<MovieFormFields>>(() => movieToFormDefaults(movie));
+    const [ formVersion, setFormVersion ] = useState(0);
+    const [ isRefreshing, setIsRefreshing ] = useState(false);
+
+    const handleRefreshMetadata = async () => {
+        const title = String(formDefaults.title || movie.title).trim();
+        if (!title) return;
+
+        setIsRefreshing(true);
+        try {
+            const result = await lookupMovie({ data: { title } });
+            if (!result.ok) {
+                toast.error(result.error);
+                return;
+            }
+            setFormDefaults((current) => mergeLookupDefaults(current, result.movie));
+            setFormVersion((current) => current + 1);
+            toast.success('Данные обновлены');
+        } catch {
+            toast.error('Не удалось обновить данные');
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
 
     if (!movie.canEdit) {
         return (
@@ -51,41 +120,37 @@ function EditMoviePage() {
     return (
         <>
             <PageTitle title={pageTitle}/>
-            <Card className="mx-auto w-full max-w-2xl">
-                <CardContent>
-                    <MovieForm
-                        submitLabel="Сохранить"
-                        defaults={{
-                            kind: movie.kind,
-                            title: movie.title,
-                            year: movie.year,
-                            country: movie.country,
-                            description: movie.description,
-                            posterUrl: movie.posterUrl ?? '',
-                            trailerUrls: movie.trailerUrls,
-                            watchLinks: movie.watchLinks,
-                            director: movie.director ?? '',
-                            genres: normalizeGenreOptions(movie.genres),
-                            starring: movie.starring.join(', '),
-                            durationMin: movie.durationMin ?? '',
-                            seasonsCount: movie.seasonsCount ?? '',
-                            episodesPerSeason: movie.episodesPerSeason.join(', '),
-                        }}
-                        onSubmit={async (fields) => {
-                            const result = await updateMovie({ data: { ...fields, movieId: movie.id } });
-                            if (result.ok) {
-                                toast.success('Изменения сохранены');
-                                navigate({ to: '/movies/$movieId', params: { movieId: movie.id } });
-                            } else {
-                                toast.error(result.error);
-                                if ('movieId' in result && result.movieId && result.movieId !== movie.id) {
-                                    navigate({ to: '/movies/$movieId', params: { movieId: result.movieId } });
-                                }
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+                <div className="flex justify-end">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRefreshMetadata}
+                        disabled={isRefreshing}
+                    >
+                        <RefreshCw className={isRefreshing ? 'animate-spin' : undefined}/>
+                        {isRefreshing ? 'Обновление…' : 'Обновить данные'}
+                    </Button>
+                </div>
+                <MovieForm
+                    key={formVersion}
+                    submitLabel="Сохранить"
+                    defaults={formDefaults}
+                    onSubmit={async (fields) => {
+                        const result = await updateMovie({ data: { ...fields, movieId: movie.id } });
+                        if (result.ok) {
+                            toast.success('Изменения сохранены');
+                            navigate({ to: '/movies/$movieId', params: { movieId: movie.id } });
+                        } else {
+                            toast.error(result.error);
+                            if ('movieId' in result && result.movieId && result.movieId !== movie.id) {
+                                navigate({ to: '/movies/$movieId', params: { movieId: result.movieId } });
                             }
-                        }}
-                    />
-                </CardContent>
-            </Card>
+                        }
+                    }}
+                />
+            </div>
         </>
     );
 }

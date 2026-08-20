@@ -98,7 +98,7 @@ function RootLayout() {
     );
 
     const headerAddButton = !showHeaderAdd ? null : addMovieKind ? (
-        <Button asChild size="sm" className="ml-auto w-8 px-0" aria-label="Добавить">
+        <Button asChild size="sm" className="w-8 px-0" aria-label="Добавить">
             <Link to="/movies/new" search={{ kind: addMovieKind }}>
                 <Plus/>
             </Link>
@@ -106,7 +106,7 @@ function RootLayout() {
     ) : (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button size="sm" className="ml-auto w-8 px-0" aria-label="Добавить">
+                <Button size="sm" className="w-8 px-0" aria-label="Добавить">
                     <Plus/>
                 </Button>
             </DropdownMenuTrigger>
@@ -172,6 +172,7 @@ function RootLayout() {
                                 </Link>
                             </Button>
                         ) : null}
+                        {appTitle?.leading}
                         {appTitle ? (
                             <div className="min-w-0 truncate text-lg font-semibold tracking-tight">
                                 {appTitle.display ?? appTitle.title}
@@ -184,7 +185,12 @@ function RootLayout() {
                                 </>
                             </Link>
                         )}
-                        {headerAddButton}
+                        {appTitle?.actions || headerAddButton ? (
+                            <div className="ml-auto flex shrink-0 items-center gap-2">
+                                {appTitle?.actions}
+                                {headerAddButton}
+                            </div>
+                        ) : null}
                     </div>
                     {appToolbar ? (
                         <div data-app-header-toolbar className="relative z-10 flex min-w-0 items-center gap-2 overflow-x-auto px-3 pb-3">

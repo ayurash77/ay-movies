@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router';
 import { ArrowLeft, Clock, Clapperboard, ExternalLink, Globe, Pencil, PlayCircle, Tv, User, Users } from 'lucide-react';
 import { toast } from 'sonner';
@@ -287,6 +287,20 @@ function MoviePage() {
     const router = useRouter();
     const displayGenres = normalizeStoredGenres(movie.genres);
     const backTo = safeReturnPath(from);
+    const headerLeading = useMemo(() => (
+        <Button asChild variant="ghost" size="icon" aria-label="Назад">
+            <a href={backTo}>
+                <ArrowLeft/>
+            </a>
+        </Button>
+    ), [ backTo ]);
+    const headerActions = useMemo(() => movie.canEdit ? (
+        <Button asChild size="sm" className="w-8 px-0" aria-label="Редактировать">
+            <Link to="/movies/$movieId/edit" params={{ movieId: movie.id }}>
+                <Pencil/>
+            </Link>
+        </Button>
+    ) : null, [ movie.canEdit, movie.id ]);
 
     const handleRate = async (value: number) => {
         const result = await rateMovie({ data: { movieId: movie.id, value } });
@@ -300,23 +314,11 @@ function MoviePage() {
 
     return (
         <div className="flex flex-col gap-6">
-            <PageTitle title={movie.title}/>
-            <div className="flex items-center justify-between">
-                <Button asChild variant="ghost" size="sm">
-                    <a href={backTo}>
-                        <ArrowLeft/>
-                        Назад
-                    </a>
-                </Button>
-                {movie.canEdit ? (
-                    <Button asChild variant="outline" size="sm">
-                        <Link to="/movies/$movieId/edit" params={{ movieId: movie.id }}>
-                            <Pencil/>
-                            Редактировать
-                        </Link>
-                    </Button>
-                ) : null}
-            </div>
+            <PageTitle
+                title={movie.title}
+                leading={headerLeading}
+                actions={headerActions}
+            />
 
             <div className="flex flex-col gap-8 md:flex-row">
                 <div className="w-full max-w-72 shrink-0 self-start overflow-hidden rounded-lg border border-border">

@@ -3,6 +3,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 export type AppTitleState = {
     title: string;
     display?: ReactNode;
+    leading?: ReactNode;
+    actions?: ReactNode;
     mobileBackTo?: '/chat';
 } | null;
 
@@ -59,10 +61,14 @@ export function useAppHeaderToolbar(toolbar: ReactNode | null) {
 export function PageTitle({
     title,
     display,
+    leading,
+    actions,
     mobileBackTo,
 }: {
     title: string;
     display?: ReactNode;
+    leading?: ReactNode;
+    actions?: ReactNode;
     mobileBackTo?: '/chat';
 }) {
     const context = useContext(AppTitleContext);
@@ -70,9 +76,9 @@ export function PageTitle({
 
     useEffect(() => {
         if (!setTitle) return;
-        setTitle({ title, display, mobileBackTo });
+        setTitle({ title, display, leading, actions, mobileBackTo });
         return () => setTitle(null);
-    }, [ display, mobileBackTo, setTitle, title ]);
+    }, [ actions, display, leading, mobileBackTo, setTitle, title ]);
 
     return null;
 }
