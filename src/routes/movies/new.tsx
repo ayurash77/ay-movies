@@ -19,6 +19,10 @@ import { loadMovieLookupDetails, lookupMovieCandidates, type MovieLookupCandidat
 import { createMovie } from '@/server/movies';
 import { normalizeGenreOptions } from '@/lib/genre-groups';
 import { movieKindOptions, type MovieFormFields } from '@/lib/movie-data';
+import {
+    hasUsableMovieLookupDetails,
+    movieLookupFormMetadata,
+} from '@/lib/movie-lookup-details';
 import type { MovieLookupDetails } from '@/lib/movie-lookup-types';
 
 export const Route = createFileRoute('/movies/new')({
@@ -44,6 +48,8 @@ function candidateToFormDefaults(
     candidate: LookupCandidate,
     fallbackTitle: string,
 ): Partial<MovieFormFields> {
+    const metadata = movieLookupFormMetadata(candidate);
+
     return {
         kind: candidate.kind ?? 'MOVIE',
         title: candidate.title ?? fallbackTitle,
@@ -59,11 +65,9 @@ function candidateToFormDefaults(
         posterUrl: candidate.posterUrl ?? '',
         metadataProvider: candidate.provider,
         metadataExternalId: candidate.externalId ?? null,
-        seriesSeasons: 'seasons' in candidate ? candidate.seasons : undefined,
-        externalRatings: 'externalRatings' in candidate
-            ? candidate.externalRatings ?? undefined
-            : undefined,
-        cast: 'cast' in candidate ? candidate.cast : undefined,
+        seriesSeasons: metadata.seriesSeasons,
+        externalRatings: metadata.externalRatings,
+        cast: metadata.cast,
     };
 }
 
@@ -77,12 +81,6 @@ function canLoadCandidateDetails(candidate: MovieLookupCandidate) {
 
 function hasDetailedSeasons(candidate: LookupCandidate): candidate is MovieLookupDetails {
     return 'seasons' in candidate;
-}
-
-function hasSuccessfulMetadataImport(candidate: LookupCandidate) {
-    if (!hasDetailedSeasons(candidate)) return false;
-    if (candidate.kind === 'SERIES') return candidate.seasons.length > 0;
-    return candidate.kind === 'MOVIE' || candidate.kind === 'CARTOON';
 }
 
 function NewMoviePage() {
@@ -156,7 +154,7 @@ function NewMoviePage() {
                     data: { provider: candidate.provider, externalId: candidate.externalId! },
                 });
 
-                if (result.ok && (result.movie.kind !== 'SERIES' || result.movie.seasons.length > 0)) {
+                if (result.ok && hasUsableMovieLookupDetails(result.movie)) {
                     selectedCandidate = result.movie;
                 } else if (!result.ok || candidate.kind === 'SERIES') {
                     toast.warning('Подробные данные о сериях недоступны. Использованы основные данные.');
@@ -165,7 +163,8 @@ function NewMoviePage() {
 
             if (generation !== requestGeneration.current) return;
 
-            const metadataImportSucceeded = hasSuccessfulMetadataImport(selectedCandidate);
+            const metadataImportSucceeded = movieLookupFormMetadata(selectedCandidate)
+                .metadataImportSucceeded;
             setLookupDefaults(candidateToFormDefaults(selectedCandidate, lookupTitle.trim()));
             setMetadataImportSucceeded(metadataImportSucceeded);
             setSubmitImportedSeriesSnapshot(

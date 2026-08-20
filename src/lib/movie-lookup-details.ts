@@ -1,9 +1,47 @@
-import type { MovieLookupDetails } from './movie-lookup-types';
+import type {
+    ExternalRatings,
+    MovieCastMember,
+    MovieLookupCandidate,
+    MovieLookupDetails,
+    SeriesSeasonMetadata,
+} from './movie-lookup-types';
+import { normalizeUsableSeriesMetadata } from './series-metadata';
 
 export type MovieLookupDetailsLoader = (externalId: string) => Promise<MovieLookupDetails | null>;
 
-function hasUsableDetails(movie: MovieLookupDetails) {
-    return movie.kind !== 'SERIES' || movie.seasons.length > 0;
+export function hasUsableMovieLookupDetails(movie: MovieLookupDetails) {
+    if (movie.kind !== 'SERIES') return true;
+
+    return normalizeUsableSeriesMetadata(movie.seasons).length > 0;
+}
+
+type FormMetadataSnapshot = {
+    seriesSeasons?: SeriesSeasonMetadata[];
+    externalRatings?: ExternalRatings;
+    cast?: MovieCastMember[];
+};
+
+export function movieLookupFormMetadata(
+    candidate: MovieLookupCandidate | MovieLookupDetails,
+    current: FormMetadataSnapshot = {},
+): FormMetadataSnapshot & { metadataImportSucceeded: boolean } {
+    if (!('seasons' in candidate) || !hasUsableMovieLookupDetails(candidate)) {
+        return {
+            metadataImportSucceeded: false,
+            seriesSeasons: current.seriesSeasons,
+            externalRatings: current.externalRatings,
+            cast: current.cast,
+        };
+    }
+
+    return {
+        metadataImportSucceeded: true,
+        seriesSeasons: candidate.kind === 'SERIES'
+            ? normalizeUsableSeriesMetadata(candidate.seasons)
+            : undefined,
+        externalRatings: candidate.externalRatings ?? undefined,
+        cast: candidate.cast,
+    };
 }
 
 /**
@@ -17,7 +55,7 @@ export async function resolveMovieLookupDetails(
     for (const load of loaders) {
         try {
             const movie = await load(externalId);
-            if (movie && hasUsableDetails(movie)) return movie;
+            if (movie && hasUsableMovieLookupDetails(movie)) return movie;
         } catch {
             // A failed provider must not prevent the next provider from loading details.
         }

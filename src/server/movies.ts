@@ -17,12 +17,13 @@ import { buildMovieDedupeKey } from '@/lib/movie-dedupe';
 import {
     externalRatingsSchema,
     lookupProviderSchema,
+    lookupSourceSchema,
     movieCastMemberSchema,
     seriesMetadataSnapshotSchema,
 } from '@/lib/movie-lookup-types';
 import {
-    normalizeSeriesMetadata,
     metadataImportWriteData,
+    normalizeUsableSeriesMetadata,
     seriesSummaryWriteData,
     seriesSnapshotWriteData,
 } from '@/lib/series-metadata';
@@ -419,7 +420,7 @@ const urlListSchema = z
 
 const genreListSchema = z.array(z.enum(GENRE_OPTIONS)).max(GENRE_OPTIONS.length).optional();
 
-const movieFieldsSchema = z.object({
+export const movieFieldsSchema = z.object({
     kind: z.enum(movieKindOptions).optional(),
     title: z.string().trim().min(1).max(200),
     year: z.coerce.number().int().min(1888).max(2100),
@@ -442,11 +443,23 @@ const movieFieldsSchema = z.object({
     seasonsCount: z.union([ z.literal(''), z.coerce.number().int().min(1).max(100) ]).optional(),
     episodesPerSeason: z.string().trim().max(500).optional(),
     metadataProvider: lookupProviderSchema.nullish(),
-    metadataExternalId: z.string().trim().max(100).nullish(),
+    metadataExternalId: z.string().max(100).nullish(),
     metadataImportSucceeded: z.boolean().optional(),
     seriesSeasons: seriesMetadataSnapshotSchema.optional(),
     externalRatings: externalRatingsSchema.optional(),
     cast: z.array(movieCastMemberSchema).max(100).optional(),
+}).superRefine((data, context) => {
+    if (data.metadataExternalId == null) return;
+    if (!lookupSourceSchema.safeParse({
+        provider: data.metadataProvider,
+        externalId: data.metadataExternalId,
+    }).success) {
+        context.addIssue({
+            code: 'custom',
+            path: [ 'metadataExternalId' ],
+            message: 'Некорректный ID провайдера',
+        });
+    }
 });
 
 function splitList(value: string | undefined) {
@@ -455,7 +468,7 @@ function splitList(value: string | undefined) {
 
 function detailedSeriesSnapshot(data: z.output<typeof movieFieldsSchema>) {
     const kind = data.kind ?? 'MOVIE';
-    return kind === 'SERIES' ? normalizeSeriesMetadata(data.seriesSeasons ?? []) : [];
+    return kind === 'SERIES' ? normalizeUsableSeriesMetadata(data.seriesSeasons ?? []) : [];
 }
 
 function toMovieData(
@@ -616,7 +629,7 @@ export const createMovie = createServerFn({ method: 'POST' })
     });
 
 export const updateMovie = createServerFn({ method: 'POST' })
-    .validator(movieFieldsSchema.extend({ movieId: z.string().min(1) }))
+    .validator(movieFieldsSchema.safeExtend({ movieId: z.string().min(1) }))
     .handler(async ({ data }) => {
         const db = await getDb();
         const user = await getAuthUser();

@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { movieKindOptions } from '@/lib/movie-data';
 import {
-    lookupProviderSchema,
+    lookupSourceSchema,
     movieLookupCandidateSchema,
     type MovieLookupCandidate,
 } from '@/lib/movie-lookup-types';
@@ -16,10 +16,7 @@ const lookupInputSchema = z.object({
     kind: z.enum(movieKindOptions).optional(),
 });
 
-const lookupDetailsInputSchema = z.object({
-    provider: lookupProviderSchema,
-    externalId: z.string().trim().min(1).max(100),
-});
+const lookupDetailsInputSchema = lookupSourceSchema;
 
 function isWikidataEntityId(externalId: string) {
     return /^Q\d+$/i.test(externalId);

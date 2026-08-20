@@ -142,6 +142,13 @@ test('ratings render available providers, auth branch, and correct vote declensi
     assert.equal(renderer.getByRole('link', { name: 'Войти и оценить' }).getAttribute('href'), '/sign-in');
 });
 
+test('ratings grid does not reserve empty provider columns', () => {
+    const source = read('src/components/movies/MovieRatings.tsx');
+
+    assert.doesNotMatch(source, /col-span-full|sm:col-span-2/);
+    assert.match(source, /repeat\(auto-fit,minmax/);
+});
+
 test('authenticated rating uses large touch targets and handles a star click', async () => {
     const selected: number[] = [];
     const renderer = await renderWithRouter(createElement(MovieRatings, {

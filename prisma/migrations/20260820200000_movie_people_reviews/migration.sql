@@ -10,6 +10,9 @@ ADD COLUMN "imdbVotes" INTEGER,
 ADD COLUMN "russianCriticsPercent" DOUBLE PRECISION,
 ADD COLUMN "russianCriticsVotes" INTEGER;
 
+ALTER TABLE "Movie" ALTER COLUMN "episodesPerSeason" DROP DEFAULT;
+ALTER TABLE "ChatThread" ALTER COLUMN "updatedAt" DROP DEFAULT;
+
 -- AlterTable
 ALTER TABLE "Comment"
 ADD COLUMN "title" TEXT,
@@ -17,6 +20,7 @@ ADD COLUMN "sentiment" "ReviewSentiment" NOT NULL DEFAULT 'NEUTRAL',
 ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 UPDATE "Comment" SET "updatedAt" = "createdAt";
+ALTER TABLE "Comment" ALTER COLUMN "updatedAt" DROP DEFAULT;
 
 -- CreateTable
 CREATE TABLE "Person" (
@@ -35,6 +39,7 @@ CREATE TABLE "Person" (
     "facts" TEXT[] NOT NULL,
     "filmography" JSONB,
     "profileUpdatedAt" TIMESTAMP(3),
+    "profileRefreshAttemptedAt" TIMESTAMP(3),
 
     CONSTRAINT "Person_pkey" PRIMARY KEY ("id")
 );

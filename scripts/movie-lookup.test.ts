@@ -4,20 +4,29 @@ import test from 'node:test';
 
 import {
     externalRatingsSchema,
+    kinopoiskExternalIdSchema,
+    lookupSourceSchema,
+    movieCastMemberSchema,
     movieLookupCandidateSchema,
     movieLookupDetailsSchema,
     type MovieLookupCandidate,
     type MovieLookupDetails,
 } from '../src/lib/movie-lookup-types';
-import { resolveMovieLookupDetails } from '../src/lib/movie-lookup-details';
+import {
+    hasUsableMovieLookupDetails,
+    movieLookupFormMetadata,
+    resolveMovieLookupDetails,
+} from '../src/lib/movie-lookup-details';
 import {
     mapKinopoiskMovie,
     mapKinopoiskRichMetadata,
     mapKinopoiskSeasons,
+    loadKinopoiskCandidate,
 } from '../src/server/movie-lookup-providers/kinopoisk-dev';
 import {
     mapKinopoiskUnofficialMovie,
     mapKinopoiskUnofficialSeasons,
+    loadKinopoiskUnofficialCandidate,
 } from '../src/server/movie-lookup-providers/kinopoisk-unofficial';
 import {
     buildLookupAttempts,
@@ -98,6 +107,55 @@ test('external rating schema enforces provider-specific ranges', () => {
         kinopoisk: { value: 85, votes: 1 },
         imdb: { value: 42, votes: 2 },
         russianCritics: { value: 85, votes: 3 },
+    }).success, false);
+});
+
+test('Kinopoisk IDs are canonical positive safe decimal strings', () => {
+    assert.equal(kinopoiskExternalIdSchema.parse('9007199254740991'), '9007199254740991');
+    for (const externalId of [
+        '', ' 1', '1 ', '+1', '-1', '0', '01', '1x', '9007199254740992',
+    ]) {
+        assert.equal(kinopoiskExternalIdSchema.safeParse(externalId).success, false, externalId);
+        for (const provider of [ 'kinopoisk-dev', 'kinopoisk-unofficial' ] as const) {
+            assert.equal(lookupSourceSchema.safeParse({ provider, externalId }).success, false);
+        }
+    }
+
+    assert.equal(lookupSourceSchema.safeParse({
+        provider: 'wikidata',
+        externalId: 'Q42',
+    }).success, true);
+});
+
+test('direct candidate and cast schemas reject malicious IDs and normalize names', () => {
+    const candidate = {
+        found: true,
+        provider: 'kinopoisk-dev' as const,
+        providerLabel: 'Кинопоиск',
+        externalId: ' 42',
+    };
+    assert.equal(movieLookupCandidateSchema.safeParse(candidate).success, false);
+
+    const parsed = movieCastMemberSchema.parse({
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: '  Актёр  ',
+        originalName: '   ',
+        photoUrl: null,
+        profession: 'actor',
+        role: '  Герой  ',
+        order: 0,
+    });
+    assert.equal(parsed.name, 'Актёр');
+    assert.equal(parsed.originalName, null);
+    assert.equal(parsed.role, 'Герой');
+    assert.equal(movieCastMemberSchema.safeParse({
+        ...parsed,
+        externalId: '01',
+    }).success, false);
+    assert.equal(movieCastMemberSchema.safeParse({
+        ...parsed,
+        name: '   ',
     }).success, false);
 });
 
@@ -378,8 +436,7 @@ test('movie lookup exports authenticated detail loading with validated provider 
     const source = readFileSync('src/server/movie-lookup.ts', 'utf8');
 
     assert.match(source, /lookupDetailsInputSchema/);
-    assert.match(source, /provider:\s*lookupProviderSchema/);
-    assert.match(source, /externalId:\s*z\.string\(\)\.trim\(\)\.min\(1\)\.max\(100\)/);
+    assert.match(source, /lookupDetailsInputSchema = lookupSourceSchema/);
     assert.match(source, /loadMovieLookupDetails\s*=\s*createServerFn/);
     assert.match(source, /data\.provider === 'wikidata'/);
     const detailsHandler = source.slice(source.indexOf('export const loadMovieLookupDetails'));
@@ -389,6 +446,33 @@ test('movie lookup exports authenticated detail loading with validated provider 
     );
     assert.match(source, /\[ loadKinopoiskUnofficialCandidate, loadKinopoiskCandidate \]/);
     assert.match(source, /\[ loadKinopoiskCandidate, loadKinopoiskUnofficialCandidate \]/);
+});
+
+test('invalid Kinopoisk detail IDs never call either provider', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousDevToken = process.env.KINOPOISK_DEV_TOKEN;
+    const previousUnofficialToken = process.env.KINOPOISK_UNOFFICIAL_TOKEN;
+    let fetches = 0;
+    process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+    process.env.KINOPOISK_UNOFFICIAL_TOKEN = 'test-token';
+    globalThis.fetch = async () => {
+        fetches += 1;
+        return Response.json({});
+    };
+
+    try {
+        for (const externalId of [ ' 42', '+42', '0', '01', '42x', '9007199254740992' ]) {
+            assert.equal(await loadKinopoiskCandidate(externalId), null);
+            assert.equal(await loadKinopoiskUnofficialCandidate(externalId), null);
+        }
+        assert.equal(fetches, 0);
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousDevToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousDevToken;
+        if (previousUnofficialToken === undefined) delete process.env.KINOPOISK_UNOFFICIAL_TOKEN;
+        else process.env.KINOPOISK_UNOFFICIAL_TOKEN = previousUnofficialToken;
+    }
 });
 
 test('movie lookup rejects Wikidata entity ids before importing Kinopoisk loaders', () => {
@@ -441,6 +525,71 @@ test('detail dispatcher falls back after an empty series snapshot', async () => 
 
     assert.deepEqual(calls, [ 'selected', 'fallback' ]);
     assert.equal(result?.seasons.length, 1);
+});
+
+test('detail dispatcher falls back after a season shell without episodes', async () => {
+    const calls: string[] = [];
+    const result = await resolveMovieLookupDetails('123', [
+        async () => {
+            calls.push('selected');
+            return detail('SERIES', [ { number: 1, episodes: [] } ]);
+        },
+        async () => {
+            calls.push('fallback');
+            return detail('SERIES', [ {
+                number: 1,
+                episodes: [ { number: 1 } ],
+            } ]);
+        },
+    ]);
+
+    assert.deepEqual(calls, [ 'selected', 'fallback' ]);
+    assert.equal(result?.seasons[0]?.episodes.length, 1);
+});
+
+test('shared detail predicate normalizes series snapshots before checking episodes', () => {
+    assert.equal(hasUsableMovieLookupDetails(detail('MOVIE', [])), true);
+    assert.equal(hasUsableMovieLookupDetails(detail('SERIES', [ {
+        number: 1,
+        episodes: [],
+    } ])), false);
+    assert.equal(hasUsableMovieLookupDetails(detail('SERIES', [ {
+        number: 1,
+        episodes: [ { number: 1 }, { number: 1 } ],
+    } ])), true);
+});
+
+test('add and edit metadata application preserve snapshots after a season shell', () => {
+    const previous = {
+        seriesSeasons: [ { number: 2, episodes: [ { number: 3 } ] } ],
+        externalRatings: {
+            kinopoisk: { value: 8, votes: 100 },
+            imdb: null,
+            russianCritics: null,
+        },
+        cast: [ {
+            provider: 'kinopoisk-dev' as const,
+            externalId: '42',
+            name: 'Актёр',
+            originalName: null,
+            photoUrl: null,
+            profession: 'actor' as const,
+            role: null,
+            order: 0,
+        } ],
+    };
+    const shell = detail('SERIES', [ { number: 1, episodes: [] } ]);
+
+    assert.deepEqual(movieLookupFormMetadata(shell), {
+        metadataImportSucceeded: false,
+        seriesSeasons: undefined,
+        externalRatings: undefined,
+        cast: undefined,
+    });
+    assert.deepEqual(movieLookupFormMetadata(shell, previous), {
+        metadataImportSucceeded: false,
+        ...previous,
+    });
 });
 
 test('detail dispatcher rejects when every series loader returns an empty snapshot', async () => {

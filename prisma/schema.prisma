@@ -109,22 +109,23 @@ model Movie {
 }
 
 model Person {
-  id               String              @id @default(cuid())
-  provider         String
-  externalId       String
-  name             String
-  originalName     String?
-  photoUrl         String?
-  sex              String?
-  growthCm         Int?
-  birthDate        DateTime?           @db.Date
-  deathDate        DateTime?           @db.Date
-  birthPlace       String[]
-  professions      String[]
-  facts            String[]
-  filmography      Json?
-  profileUpdatedAt DateTime?
-  credits          MoviePersonCredit[]
+  id                        String              @id @default(cuid())
+  provider                  String
+  externalId                String
+  name                      String
+  originalName              String?
+  photoUrl                  String?
+  sex                       String?
+  growthCm                  Int?
+  birthDate                 DateTime?           @db.Date
+  deathDate                 DateTime?           @db.Date
+  birthPlace                String[]
+  professions               String[]
+  facts                     String[]
+  filmography               Json?
+  profileUpdatedAt          DateTime?
+  profileRefreshAttemptedAt DateTime?
+  credits                   MoviePersonCredit[]
 
   @@unique([provider, externalId])
   @@index([name])

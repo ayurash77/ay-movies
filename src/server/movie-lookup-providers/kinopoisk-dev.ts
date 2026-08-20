@@ -9,6 +9,7 @@ import {
 } from '@/lib/person-data';
 import {
     externalRatingSchemas,
+    kinopoiskExternalIdSchema,
     movieCastMemberSchema,
     movieLookupDetailsSchema,
     type ExternalRatings,
@@ -111,10 +112,7 @@ const DEFAULT_BASE_URL = 'https://api.kinopoisk.dev';
 
 const rawSummaryIdSchema = z.union([
     z.number().int().positive().refine(Number.isSafeInteger),
-    z.string()
-        .max(100)
-        .regex(/^[1-9]\d*$/)
-        .refine((value) => Number.isSafeInteger(Number(value))),
+    kinopoiskExternalIdSchema,
 ]);
 const rawSummaryTextSchema = z.string().max(300).nullish();
 const rawSummaryRatingSchema = z.number().finite().min(0).max(10).nullish();
@@ -230,14 +228,8 @@ function isHttpUrl(value: string) {
 }
 
 function externalId(value: unknown) {
-    if (typeof value === 'number') {
-        return Number.isSafeInteger(value) && value > 0 ? String(value) : null;
-    }
-
-    const normalized = text(value);
-    return /^[1-9]\d*$/.test(normalized) && Number.isSafeInteger(Number(normalized))
-        ? normalized
-        : null;
+    const parsed = rawSummaryIdSchema.safeParse(value);
+    return parsed.success ? String(parsed.data) : null;
 }
 
 function nullableDate(value: unknown) {
@@ -299,8 +291,8 @@ function rating(
 }
 
 function sourceUrl(movie: KinopoiskMovie) {
-    if (movie.id == null) return undefined;
-    return `https://www.kinopoisk.ru/film/${movie.id}/`;
+    const id = externalId(movie.id);
+    return id ? `https://www.kinopoisk.ru/film/${id}/` : undefined;
 }
 
 function confidenceFor(movie: KinopoiskMovie) {
@@ -327,12 +319,13 @@ export function mapKinopoiskMovie(
         .filter(Boolean)
         .slice(0, 6) ?? [];
     const kind = detectKind(movie);
+    const id = externalId(movie.id);
 
     return {
         found: true,
         provider: 'kinopoisk-dev',
         providerLabel: 'Кинопоиск',
-        externalId: movie.id == null ? undefined : String(movie.id),
+        externalId: id ?? undefined,
         sourceUrl: sourceUrl(movie),
         confidence: confidenceFor(movie),
         rating: movie.rating?.kp ?? movie.rating?.imdb ?? null,
@@ -531,8 +524,9 @@ async function loadKinopoiskSeasons(movieId: string) {
 export async function loadKinopoiskPerson(
     personExternalId: string,
 ): Promise<PersonProfileLoadResult | null> {
-    const personId = personExternalId.trim();
-    if (!externalId(personId)) return null;
+    const parsedPersonId = kinopoiskExternalIdSchema.safeParse(personExternalId);
+    if (!parsedPersonId.success) return null;
+    const personId = parsedPersonId.data;
 
     const person = await kinopoiskJson<unknown>(
         `/v1.4/person/${encodeURIComponent(personId)}`,
@@ -595,8 +589,9 @@ export async function lookupKinopoiskCandidates(title: string, kind?: MovieKind)
 }
 
 export async function loadKinopoiskCandidate(externalId: string): Promise<MovieLookupDetails | null> {
-    const movieId = externalId.trim();
-    if (!movieId) return null;
+    const parsedMovieId = kinopoiskExternalIdSchema.safeParse(externalId);
+    if (!parsedMovieId.success) return null;
+    const movieId = parsedMovieId.data;
 
     const [ movie, rawSeasons ] = await Promise.all([
         kinopoiskJson<KinopoiskMovie>(`/v1.4/movie/${encodeURIComponent(movieId)}`),

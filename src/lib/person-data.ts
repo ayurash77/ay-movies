@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { kinopoiskExternalIdSchema } from './movie-lookup-types';
+
 const boundedTextSchema = z.string().trim().min(1).max(300);
 
 export const PERSON_PROFILE_LIMITS = {
@@ -29,7 +31,7 @@ const httpUrlSchema = z.string()
 const dateSchema = z.string().refine(isIsoDate);
 
 export const personFilmographyEntrySchema = z.object({
-    externalId: z.string().trim().regex(/^[1-9]\d*$/).max(100),
+    externalId: kinopoiskExternalIdSchema,
     title: boundedTextSchema,
     originalTitle: boundedTextSchema.nullable().optional(),
     year: z.number().int().min(1800).max(2200).nullable().optional(),
@@ -43,8 +45,8 @@ export const personFilmographyEntrySchema = z.object({
 export const personFilmographySchema = z.array(personFilmographyEntrySchema).max(2_000);
 
 export const personProfileSchema = z.object({
-    provider: z.string().trim().min(1).max(100),
-    externalId: z.string().trim().min(1).max(100),
+    provider: z.literal('kinopoisk-dev'),
+    externalId: kinopoiskExternalIdSchema,
     name: boundedTextSchema,
     originalName: boundedTextSchema.nullable(),
     photoUrl: httpUrlSchema.nullable(),

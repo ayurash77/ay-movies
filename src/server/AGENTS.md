@@ -32,9 +32,12 @@
   токенов только для базовых метаданных.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
 - `people.ts` — `getPerson` по локальному `Person.id`: cache TTL 7 дней,
-  stale fallback и merge partial refresh. Полная актерская filmography до 2000
-  записей обогащается пакетами до 100, concurrency 4, deadline 15 секунд;
-  локальные фильмы сопоставляются по `metadataExternalId`.
+  stale fallback, merge partial refresh и 15-минутный retry backoff по
+  `profileRefreshAttemptedAt`. Complete refresh обновляет `profileUpdatedAt` и
+  attempt, partial/failed — только attempt; concurrent refresh одного local ID
+  coalesced in-process. Полная актерская filmography до 2000 записей
+  обогащается пакетами до 100, concurrency 4, deadline 15 секунд; локальные
+  фильмы сопоставляются по `metadataExternalId`.
 - `reviews.ts` — review API поверх физической Prisma-модели `Comment`; avatar,
   title/sentiment/text, owner/admin edit/delete, максимум 100 записей на detail.
 - `notifications.ts` — уведомления для фильмов, рецензий (`REVIEW`) и chat messages.
@@ -65,10 +68,14 @@
 - Новый непустой нормализованный snapshot заменяет старый в одной транзакции.
   При пустом/неуспешном detail lookup сохраняй текущие snapshot и summary. При
   переводе записи из `SERIES` в другой kind очищай подробные строки и summary.
+- Provider fallback и add/edit используют один `hasUsableMovieLookupDetails()`:
+  сериал пригоден только при наличии хотя бы одного валидного эпизода после
+  нормализации. Persistence использует `normalizeUsableSeriesMetadata()`, чтобы
+  empty season shells не заменяли существующий snapshot.
 - `metadataProvider` и `metadataExternalId` — выбранный источник; не меняй их
   без явно submitted source. `metadataUpdatedAt` обновляй только после
   успешного detailed import, не при обычном save, Wikidata или provider error.
-- `Person` и `MoviePersonCredit`, nullable rating columns и review-поля
+- `Person` (включая nullable `profileRefreshAttemptedAt`) и `MoviePersonCredit`, nullable rating columns и review-поля
   физической таблицы `Comment` добавляет миграция
   `20260820200000_movie_people_reviews`. Старые rows остаются neutral reviews;
   внутренние relations/counts по-прежнему называются `comments`.

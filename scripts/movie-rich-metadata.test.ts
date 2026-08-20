@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -10,6 +11,7 @@ import {
     writeMovieRichMetadata,
     type MovieRichMetadataWriter,
 } from '../src/server/movie-rich-metadata';
+import { movieFieldsSchema } from '../src/server/movies';
 
 function createWriter() {
     const calls = {
@@ -73,6 +75,62 @@ const cast = [
         order: 0,
     },
 ];
+
+test('feature migration drops the temporary review timestamp default and adds refresh attempts', () => {
+    const migration = readFileSync(
+        'prisma/migrations/20260820200000_movie_people_reviews/migration.sql',
+        'utf8',
+    );
+    const schema = readFileSync('prisma/schema.prisma', 'utf8');
+
+    assert.match(
+        migration,
+        /UPDATE "Comment" SET "updatedAt" = "createdAt";\s+ALTER TABLE "Comment" ALTER COLUMN "updatedAt" DROP DEFAULT;/,
+    );
+    assert.match(
+        migration,
+        /ALTER TABLE "Movie" ALTER COLUMN "episodesPerSeason" DROP DEFAULT;/,
+    );
+    assert.match(
+        migration,
+        /ALTER TABLE "ChatThread" ALTER COLUMN "updatedAt" DROP DEFAULT;/,
+    );
+    assert.match(
+        migration,
+        /"profileRefreshAttemptedAt" TIMESTAMP\(3\)/,
+    );
+    assert.match(
+        schema,
+        /profileRefreshAttemptedAt\s+DateTime\?/,
+    );
+});
+
+test('movie RPC schema enforces provider-specific metadata IDs', () => {
+    const fields = {
+        title: 'Фильм',
+        year: 2026,
+        country: 'Россия',
+        description: 'Описание',
+    };
+
+    for (const metadataExternalId of [ ' 42', '+42', '0', '01', '42x', '9007199254740992' ]) {
+        assert.equal(movieFieldsSchema.safeParse({
+            ...fields,
+            metadataProvider: 'kinopoisk-dev',
+            metadataExternalId,
+        }).success, false, metadataExternalId);
+    }
+    assert.equal(movieFieldsSchema.safeParse({
+        ...fields,
+        metadataProvider: 'kinopoisk-unofficial',
+        metadataExternalId: '42',
+    }).success, true);
+    assert.equal(movieFieldsSchema.safeParse({
+        ...fields,
+        metadataProvider: 'wikidata',
+        metadataExternalId: 'Q42',
+    }).success, true);
+});
 
 test('normalizes valid ratings and removes invalid score or vote values', () => {
     assert.deepEqual(normalizeExternalRatings({
@@ -298,4 +356,20 @@ test('partial cast updates preserve nullable person identity fields', async () =
         originalName: 'First Actor',
         photoUrl: 'https://example.com/first.jpg',
     });
+});
+
+test('invalid direct cast IDs and blank names never create people', async () => {
+    const { calls, tx } = createWriter();
+
+    await writeMovieRichMetadata(tx, 'movie-1', {
+        importSucceeded: true,
+        cast: [
+            { ...cast[0], externalId: '01' },
+            { ...cast[0], externalId: ' 10' },
+            { ...cast[0], name: '   ' },
+        ],
+    });
+
+    assert.deepEqual(calls.personUpserts, []);
+    assert.deepEqual(calls.creditDeletes, []);
 });

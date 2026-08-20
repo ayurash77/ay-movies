@@ -60,6 +60,26 @@ export const movieLookupSchema = z.object({
 
 export const lookupProviderSchema = z.enum([ 'kinopoisk-dev', 'kinopoisk-unofficial', 'wikidata' ]);
 
+export const kinopoiskExternalIdSchema = z.string()
+    .max(100)
+    .regex(/^[1-9]\d*$/)
+    .refine((value) => Number.isSafeInteger(Number(value)));
+
+export const lookupSourceSchema = z.discriminatedUnion('provider', [
+    z.object({
+        provider: z.literal('kinopoisk-dev'),
+        externalId: kinopoiskExternalIdSchema,
+    }),
+    z.object({
+        provider: z.literal('kinopoisk-unofficial'),
+        externalId: kinopoiskExternalIdSchema,
+    }),
+    z.object({
+        provider: z.literal('wikidata'),
+        externalId: z.string().max(100).regex(/^Q[1-9]\d*$/i),
+    }),
+]);
+
 export const movieLookupCandidateSchema = movieLookupSchema.extend({
     provider: lookupProviderSchema,
     providerLabel: z.string(),
@@ -67,6 +87,18 @@ export const movieLookupCandidateSchema = movieLookupSchema.extend({
     sourceUrl: z.string().nullish(),
     rating: z.number().nullish(),
     confidence: z.number().int().min(0).max(100).nullish(),
+}).superRefine((candidate, context) => {
+    if (candidate.externalId == null) return;
+    if (!lookupSourceSchema.safeParse({
+        provider: candidate.provider,
+        externalId: candidate.externalId,
+    }).success) {
+        context.addIssue({
+            code: 'custom',
+            path: [ 'externalId' ],
+            message: 'Некорректный ID провайдера',
+        });
+    }
 });
 
 export const seriesEpisodeMetadataSchema = z.object({
@@ -128,18 +160,24 @@ export const externalRatingsSchema = z.object({
     russianCritics: externalRatingSchemas.russianCritics.nullish(),
 });
 
+const nullableCastTextSchema = (maxLength: number) => z.string()
+    .trim()
+    .max(maxLength)
+    .transform((value) => value || null)
+    .nullish();
+
 export const movieCastMemberSchema = z.object({
     provider: z.literal('kinopoisk-dev'),
-    externalId: z.string().min(1).max(100),
-    name: z.string().min(1).max(300),
-    originalName: z.string().max(300).nullish(),
+    externalId: kinopoiskExternalIdSchema,
+    name: z.string().trim().min(1).max(300),
+    originalName: nullableCastTextSchema(300),
     photoUrl: nullableHttpUrlSchema,
     profession: z.literal('actor'),
-    role: z.string().max(500).nullish(),
+    role: nullableCastTextSchema(500),
     order: z.number().int().min(0).max(999),
 });
 
-export const movieLookupDetailsSchema = movieLookupCandidateSchema.extend({
+export const movieLookupDetailsSchema = movieLookupCandidateSchema.safeExtend({
     seasons: seriesMetadataSnapshotSchema,
     externalRatings: externalRatingsSchema.nullish(),
     cast: z.array(movieCastMemberSchema).max(100).default([]),

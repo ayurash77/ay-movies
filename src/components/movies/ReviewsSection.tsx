@@ -233,8 +233,12 @@ export function ReviewCard({ review, isAuthed = true, disabled = false, onEdit, 
                     </div>
                 ) : null}
             </div>
-            {review.title ? <h3 className="mt-3 text-base font-semibold">{review.title}</h3> : null}
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{review.text}</p>
+            {review.title ? (
+                <h3 className="mt-3 text-base font-semibold [overflow-wrap:anywhere]">{review.title}</h3>
+            ) : null}
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">
+                {review.text}
+            </p>
         </article>
     );
 }
@@ -245,6 +249,8 @@ export function ReviewsSection({ movieId, reviews, isAuthed, actions }: ReviewsS
     const [ isMutating, setIsMutating ] = useState(false);
     const [ newEditorVersion, setNewEditorVersion ] = useState(0);
     const [ editingId, setEditingId ] = useState<string | null>(null);
+    const [ hiddenReviewIds, setHiddenReviewIds ] = useState<Set<string>>(() => new Set());
+    const visibleReviews = reviews.filter((review) => !hiddenReviewIds.has(review.id));
     const reviewActions: ReviewsSectionActions = actions ?? {
         add: (content) => addReview({ data: { movieId, ...content } }),
         update: (reviewId, content) => updateReview({ data: { reviewId, ...content } }),
@@ -318,6 +324,10 @@ export function ReviewsSection({ movieId, reviews, isAuthed, actions }: ReviewsS
         if (!window.confirm('Удалить рецензию?')) return;
         await runMutation({
             mutate: () => reviewActions.delete(reviewId),
+            onSuccess: () => {
+                setEditingId((current) => current === reviewId ? null : current);
+                setHiddenReviewIds((current) => new Set(current).add(reviewId));
+            },
             successMessage: 'Рецензия удалена',
             failureMessage: 'Не удалось удалить рецензию',
         });
@@ -328,7 +338,7 @@ export function ReviewsSection({ movieId, reviews, isAuthed, actions }: ReviewsS
             <h2 className="flex items-center gap-2 text-xl font-bold">
                 <MessageSquareText className="size-5 text-primary"/>
                 Рецензии
-                <span className="text-base font-normal text-muted-foreground">{reviews.length}</span>
+                <span className="text-base font-normal text-muted-foreground">{visibleReviews.length}</span>
             </h2>
 
             {isAuthed ? (
@@ -345,11 +355,11 @@ export function ReviewsSection({ movieId, reviews, isAuthed, actions }: ReviewsS
                 </p>
             )}
 
-            {reviews.length === 0 ? (
+            {visibleReviews.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Рецензий пока нет. Будьте первым.</p>
             ) : (
                 <div className="flex flex-col gap-3">
-                    {reviews.map((review) => (
+                    {visibleReviews.map((review) => (
                         <div key={review.id} className="flex flex-col gap-2">
                             <ReviewCard
                                 review={review}

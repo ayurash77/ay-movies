@@ -5,6 +5,7 @@ import test from 'node:test';
 
 import {
     normalizeSeriesMetadata,
+    normalizeUsableSeriesMetadata,
     metadataImportWriteData,
     seriesMetadataSummary,
     seriesSummaryWriteData,
@@ -83,6 +84,28 @@ test('rejects empty snapshots and invalid dates without throwing', () => {
     assert.equal(normalizeSeriesMetadata([
         { number: 1, episodes: [ { number: 1, airDate: 'not-a-date' } ] },
     ])[0].episodes[0].airDate, null);
+});
+
+test('empty season shells are not usable persistence snapshots', () => {
+    assert.deepEqual(normalizeUsableSeriesMetadata([
+        { number: 1, episodes: [] },
+        { number: 2, episodes: [] },
+    ]), []);
+    assert.deepEqual(normalizeUsableSeriesMetadata([
+        { number: 2, episodes: [ { number: 2 } ] },
+        { number: 1, episodes: [] },
+    ]), [
+        { number: 1, name: null, originalName: null, description: null, originalDescription: null, airDate: null, durationMin: null, posterUrl: null, episodes: [] },
+        { number: 2, name: null, originalName: null, description: null, originalDescription: null, airDate: null, durationMin: null, posterUrl: null, episodes: [ {
+            number: 2,
+            name: null,
+            originalName: null,
+            description: null,
+            originalDescription: null,
+            airDate: null,
+            stillUrl: null,
+        } ] },
+    ]);
 });
 
 test('builds nested Prisma create data for a detailed series snapshot', () => {

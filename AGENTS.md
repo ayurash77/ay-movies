@@ -99,8 +99,11 @@ default-порядок не переопределяет явный выбор �
   refresh обновляет только валидные значения; пустые ratings/cast и ошибки не
   стирают ранее сохраненные данные. `starring` остается legacy fallback.
 - `/people/$personId` использует локальный `Person.id`. Профиль и полная
-  актерская фильмография кэшируются на 7 дней; stale cache возвращается при
-  ошибке, partial refresh объединяется со старыми полями и не становится fresh.
+  актерская фильмография кэшируются на 7 дней. `profileRefreshAttemptedAt`
+  фиксирует complete, partial и failed provider attempts; 15-минутный backoff
+  возвращает валидный stale cache или temporary unavailable без повторного
+  provider call. Partial refresh не меняет `profileUpdatedAt`. Одновременные
+  refresh одного local person coalesced в одном server process.
   Filmography ограничена 2000 записями, enrichment идет пакетами до 100,
   concurrency 4 и с deadline 15 секунд. Локальные совпадения по
   `metadataExternalId` ведут на `/movies/$movieId`, остальные — на Кинопоиск.
@@ -113,6 +116,10 @@ default-порядок не переопределяет явный выбор �
   нормализует пустые строки и даты, сортирует сезоны и серии. Данные хранятся в
   `Movie.seriesSeasons` и `SeriesSeason.episodes`; списки и карточки читают
   только summary-поля без join к подробным таблицам.
+- `hasUsableMovieLookupDetails()` — общий predicate provider fallback и add/edit
+  form application. Для `SERIES` он использует нормализованный snapshot и
+  требует хотя бы один валидный эпизод; `normalizeUsableSeriesMetadata()`
+  защищает persistence от replacement пустыми season shells.
 - Снимок подробных данных заменяет старый только если после нормализации он
   непустой. Замена, обновление summary и создание вложенных строк выполняются
   одной транзакцией. Пустой или неуспешный ответ сохраняет прежние snapshot и

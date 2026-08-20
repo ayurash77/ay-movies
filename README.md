@@ -4,9 +4,10 @@ AY Movies — full-stack веб-библиотека фильмов, сериа�
 
 Возможности:
 - каталог с пагинацией, поиском, сортировкой, фильтрами и группировками;
-- страницы фильмов/сериалов/мультфильмов с постерами, трейлерами, рейтингами, комментариями и списками просмотра;
+- страницы фильмов/сериалов/мультфильмов с постерами, трейлерами, provider ratings, visual cast, рецензиями и списками просмотра;
+- подробные сезоны/серии и страницы персон с кэшируемой фильмографией;
 - роли `USER`/`ADMIN`, admin Dashboard, друзья, подписки и профили с аватарами;
-- уведомления о новых фильмах, комментариях и сообщениях;
+- уведомления о новых фильмах, рецензиях и сообщениях;
 - чат с друзьями: ответы, фото, редактирование/удаление сообщений;
 - темы оформления, default theme — Ayu;
 - загрузки через local storage в dev и S3-compatible Timeweb storage в production.
@@ -43,6 +44,7 @@ Dev server: `http://localhost:3002`.
 pnpm dev             # dev server, порт 3002
 pnpm build           # production build
 pnpm preview         # preview собранного приложения
+pnpm test            # полный набор contract/unit/behavioral тестов
 pnpm typecheck       # tsc --noEmit
 
 pnpm dc:up           # старт PostgreSQL в Docker, host port 5434
@@ -53,6 +55,7 @@ pnpm db:generate     # regenerate Prisma client
 pnpm db:studio       # Prisma Studio
 pnpm db:seed         # очистить и пересоздать demo data
 pnpm db:push         # dev-only sync без миграции, не использовать для production flow
+pnpm exec prisma validate
 ```
 
 ## Продакшен
@@ -75,9 +78,13 @@ ssh deploy@72.56.8.147 \
   'cd /opt/ayurash && docker compose up -d --build ay-movies'
 ```
 
-Runtime env хранится только на VDS в `/opt/ayurash/env/ay-movies.env` и содержит
-`DATABASE_URL`, `SESSION_SECRET`, `WEB_ALLOWED_HOSTS` и `S3_*`. Автозаполнение
-карточки использует Wikipedia/Wikidata без OpenAI и без API-токенов.
+Runtime env хранится только на VDS в `/opt/ayurash/env/ay-movies.env`. Обязательны
+`DATABASE_URL`, `SESSION_SECRET`, `WEB_ALLOWED_HOSTS`; uploads используют `S3_*`.
+Для rich metadata настраиваются `KINOPOISK_DEV_TOKEN` и
+`KINOPOISK_UNOFFICIAL_TOKEN` с опциональными `*_BASE_URL`. Токены остаются на
+сервере. Поиск параллельно использует доступные Kinopoisk providers;
+Wikipedia/Wikidata остаются basic fallback без подробных сезонов, ratings/cast
+и персон.
 
 ## Архитектура
 
@@ -89,9 +96,10 @@ src/
     __root.tsx              app shell, header, sidebar, profile/theme dialogs
     index.tsx               общая Фильмотека
     movies/index.tsx        Фильмы / Сериалы / Мультфильмы
-    movies/$movieId.tsx     детали, рейтинг, комментарии, watch buttons
+    movies/$movieId.tsx     детали, ratings/cast, рецензии, watch buttons
     movies/$movieId_.edit   редактирование записи
     movies/new.tsx          добавление записи
+    people/$personId.tsx    профиль персоны и полная фильмография
     dashboard.index.tsx     admin Dashboard: пользователи и роли
     dashboard.$userId.tsx   профиль пользователя для dashboard/admin
     friends.tsx             друзья: список, добавление, чат, удаление
@@ -106,7 +114,11 @@ src/
     auth.ts                 auth server functions
     session.ts              server-only sessions/cookies
     movies.ts               каталог, поиск, CRUD, ratings, watch lists
-    movie-lookup.ts         no-token lookup через Wikipedia/Wikidata
+    movie-lookup.ts         provider dispatch и fallback detailed lookup
+    movie-lookup-providers/ Kinopoisk.dev, Kinopoisk Unofficial, Wikidata
+    movie-rich-metadata.ts  stored ratings/cast snapshots
+    people.ts               person cache, backoff и filmography matching
+    reviews.ts              API рецензий поверх таблицы Comment
     dashboard.ts            users, friends, followers, roles
     notifications.ts        создание/list/read уведомлений
     chat.ts                 direct chat, unread counters, replies/images/edit/delete
@@ -137,10 +149,14 @@ prisma/
 ## Данные и права
 
 - `Movie.kind`: `MOVIE`, `SERIES`, `CARTOON`.
-- У сериалов есть `seasonsCount` и `episodesPerSeason`.
+- У сериалов есть legacy summary `seasonsCount`/`episodesPerSeason` и
+  нормализованные `SeriesSeason`/`SeriesEpisode`; snapshot заменяется только при
+  наличии хотя бы одного валидного эпизода.
+- Provider ratings/cast хранятся локально. `Person` profiles имеют TTL 7 дней и
+  retry backoff 15 минут после partial/failed refresh.
 - Admin определяется через stored role или bootstrap email `ayurash@me.com`.
 - `/dashboard` доступен admin и отвечает за управление пользователями.
-- Admin может управлять пользователями, чужими фильмами/комментариями и видимыми сообщениями чата.
+- Admin может управлять пользователями, чужими фильмами/рецензиями и видимыми сообщениями чата.
 - Обычный пользователь управляет своим контентом.
 
 ## Важные ограничения

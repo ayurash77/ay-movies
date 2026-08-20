@@ -37,6 +37,9 @@
   candidate вызывает `loadMovieLookupDetails`. На edit `Обновить` использует
   сохраненные provider/external ID; не заменяй данные формы результатом stale
   запроса и не очищай старые серии при ошибке/пустом ответе.
+- Add/edit применяют detailed metadata через общий
+  `hasUsableMovieLookupDetails()`: series season shells без валидных episodes не
+  считаются успешным import и сохраняют текущие seasons/ratings/cast.
 - Ручных полей `Сезонов` и `Серий` в форме нет. `seriesSeasons` — скрытое
   импортируемое состояние; timestamp импорта выставляется только после
   успешной загрузки деталей.

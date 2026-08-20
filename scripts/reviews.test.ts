@@ -343,6 +343,8 @@ test('review card renders avatar, sentiment, title, full text, edited marker, an
         assert.equal(view.getByRole('article').getAttribute('data-sentiment'), 'POSITIVE');
         assert.ok(view.getByText(review.title!));
         assert.ok((view.container.textContent ?? '').includes(review.text.trim()));
+        assert.match(view.getByText(review.title!).className, /\[overflow-wrap:anywhere\]/);
+        assert.match(view.getByRole('article').querySelector('p')?.className ?? '', /\[overflow-wrap:anywhere\]/);
         assert.ok(view.getByText(/изменено/));
         assert.ok(view.getByRole('button', { name: 'Редактировать рецензию' }));
         assert.ok(view.getByRole('button', { name: 'Удалить рецензию' }));
@@ -441,6 +443,45 @@ test('successful update closes its editor even when refresh fails', async () => 
     assert.equal(updates, 1);
     assert.equal(refreshes, 1);
     assert.equal((view.getByRole('button', { name: 'Редактировать рецензию' }) as HTMLButtonElement).disabled, false);
+});
+
+test('successful delete hides the review and closes its editor when refresh fails', async () => {
+    let deletes = 0;
+    let refreshes = 0;
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+    try {
+        const view = await renderWithRouter(createElement(ReviewsSection, {
+            movieId: 'movie-1',
+            reviews: [ manageableReview() ],
+            isAuthed: true,
+            actions: {
+                add: async () => ({ ok: true as const }),
+                update: async () => ({ ok: true as const }),
+                delete: async () => {
+                    deletes += 1;
+                    return { ok: true as const };
+                },
+                refresh: async () => {
+                    refreshes += 1;
+                    throw new Error('refresh failed');
+                },
+            },
+        }));
+        fireEvent.click(view.getByRole('button', { name: 'Редактировать рецензию' }));
+        assert.ok(view.getByRole('button', { name: 'Сохранить' }));
+        fireEvent.click(view.getByRole('button', { name: 'Удалить рецензию' }));
+
+        await waitFor(() => {
+            assert.equal(view.queryAllByRole('article').length, 0);
+            assert.equal(view.queryByRole('button', { name: 'Сохранить' }), null);
+        });
+        assert.equal(deletes, 1);
+        assert.equal(refreshes, 1);
+        assert.ok(view.getByText('Рецензий пока нет. Будьте первым.'));
+    } finally {
+        window.confirm = originalConfirm;
+    }
 });
 
 test('shared mutation lock blocks double add and all review actions before rerender', async () => {

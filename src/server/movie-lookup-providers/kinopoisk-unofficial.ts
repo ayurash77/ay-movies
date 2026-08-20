@@ -1,5 +1,6 @@
 import type { MovieKind } from '@/lib/movie-data';
 import {
+    kinopoiskExternalIdSchema,
     movieLookupDetailsSchema,
     type MovieLookupCandidate,
     type MovieLookupDetails,
@@ -91,7 +92,11 @@ function durationValue(value: unknown) {
 
 function movieId(movie: KinopoiskUnofficialMovie) {
     const id = movie.kinopoiskId ?? movie.filmId;
-    return id == null ? '' : String(id);
+    if (typeof id === 'number') {
+        return Number.isSafeInteger(id) && id > 0 ? String(id) : '';
+    }
+    const parsed = kinopoiskExternalIdSchema.safeParse(id);
+    return parsed.success ? parsed.data : '';
 }
 
 function sourceUrl(movie: KinopoiskUnofficialMovie) {
@@ -238,8 +243,9 @@ export async function lookupKinopoiskUnofficialCandidates(
 }
 
 export async function loadKinopoiskUnofficialCandidate(externalId: string): Promise<MovieLookupDetails | null> {
-    const id = externalId.trim();
-    if (!id) return null;
+    const parsedId = kinopoiskExternalIdSchema.safeParse(externalId);
+    if (!parsedId.success) return null;
+    const id = parsedId.data;
 
     const [ movie, staff, rawSeasons ] = await Promise.all([
         loadMovie(id),

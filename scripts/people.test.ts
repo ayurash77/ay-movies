@@ -18,6 +18,17 @@ import {
 
 const NOW = new Date('2026-08-20T12:00:00Z');
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const RETRY_BACKOFF_MS = 15 * 60 * 1000;
+
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+}
 
 const cachedProfile: PersonProfile = {
     provider: 'kinopoisk-dev',
@@ -70,6 +81,72 @@ test('person DTOs reject oversized data and non-http image URLs', () => {
         title: 'Фильм',
         posterUrl: `https://example.com/${'x'.repeat(2_049)}`,
     } ]).success, false);
+});
+
+test('person DTO rejects non-canonical Kinopoisk IDs', () => {
+    for (const externalId of [ ' 42', '42 ', '+42', '-42', '0', '01', '42x', '9007199254740992' ]) {
+        assert.equal(personProfileSchema.safeParse({
+            ...cachedProfile,
+            externalId,
+        }).success, false, externalId);
+    }
+});
+
+test('invalid person IDs never call the provider', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+    let fetches = 0;
+    process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+    globalThis.fetch = async () => {
+        fetches += 1;
+        return Response.json({});
+    };
+
+    try {
+        for (const externalId of [ ' 42', '+42', '0', '01', '42x', '9007199254740992' ]) {
+            assert.equal(await loadKinopoiskPerson(externalId), null);
+        }
+        assert.equal(fetches, 0);
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+    }
+});
+
+test('invalid persisted person ID never reaches the injected provider loader', async () => {
+    const { store } = createStore({
+        id: 'person-invalid-provider-id',
+        provider: 'kinopoisk-dev',
+        externalId: ' 42',
+        name: 'Компактное имя',
+        originalName: null,
+        photoUrl: null,
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [ 'actor' ],
+        facts: [],
+        filmography: null,
+        profileUpdatedAt: null,
+        profileRefreshAttemptedAt: null,
+    });
+    let loads = 0;
+
+    const result = await resolvePersonProfile({
+        personId: 'person-invalid-provider-id',
+        store,
+        now: NOW,
+        loadFresh: async () => {
+            loads += 1;
+            return { profile: cachedProfile, complete: true };
+        },
+    });
+
+    assert.equal(loads, 0);
+    assert.equal(result.ok, false);
 });
 
 test('fresh cache is reused without provider request', async () => {
@@ -153,6 +230,45 @@ test('refresh rejection without cache returns unavailable', async () => {
         },
     });
 
+    assert.deepEqual(result, { source: 'unavailable', profile: null });
+});
+
+test('refresh backoff returns valid stale cache without calling provider', async () => {
+    let loads = 0;
+    const result = await resolvePersonSnapshot({
+        cached: {
+            profile: cachedProfile,
+            updatedAt: new Date('2026-08-10T12:00:00Z'),
+        },
+        refreshAttemptedAt: new Date('2026-08-20T11:50:00Z'),
+        retryBackoffMs: RETRY_BACKOFF_MS,
+        now: NOW,
+        maxAgeMs: MAX_AGE_MS,
+        loadFresh: async () => {
+            loads += 1;
+            return { profile: cachedProfile, complete: true };
+        },
+    });
+
+    assert.equal(loads, 0);
+    assert.deepEqual(result, { source: 'stale-cache', profile: cachedProfile });
+});
+
+test('refresh backoff returns unavailable without valid cache and does not hammer provider', async () => {
+    let loads = 0;
+    const result = await resolvePersonSnapshot({
+        cached: null,
+        refreshAttemptedAt: new Date('2026-08-20T11:50:00Z'),
+        retryBackoffMs: RETRY_BACKOFF_MS,
+        now: NOW,
+        maxAgeMs: MAX_AGE_MS,
+        loadFresh: async () => {
+            loads += 1;
+            return { profile: cachedProfile, complete: true };
+        },
+    });
+
+    assert.equal(loads, 0);
     assert.deepEqual(result, { source: 'unavailable', profile: null });
 });
 
@@ -582,6 +698,7 @@ test('profile refresh persists validated snapshot and matches local movies by ex
             facts: [ 'Факт' ],
             filmography: cachedProfile.filmography,
             profileUpdatedAt: NOW,
+            profileRefreshAttemptedAt: NOW,
         },
     } ]);
 });
@@ -692,7 +809,7 @@ test('partial refresh merges cached enrichment by external ID without extending 
         localMovieId: 'local-100',
     });
     assert.deepEqual(result.person.filmography[1], partialProfile.filmography[1]);
-    const update = calls.updates[0] as { data?: { filmography?: unknown; profileUpdatedAt?: unknown } };
+    const update = calls.updates[0] as { data?: { filmography?: unknown; profileUpdatedAt?: unknown; profileRefreshAttemptedAt?: unknown } };
     assert.deepEqual(update.data?.filmography, [
         {
             ...cachedProfile.filmography[0],
@@ -702,6 +819,7 @@ test('partial refresh merges cached enrichment by external ID without extending 
         partialProfile.filmography[1],
     ]);
     assert.equal(update.data?.profileUpdatedAt, staleUpdatedAt);
+    assert.equal(update.data?.profileRefreshAttemptedAt, NOW);
 });
 
 test('partial first refresh is displayable but does not create a fresh TTL', async () => {
@@ -734,11 +852,12 @@ test('partial first refresh is displayable but does not create a fresh TTL', asy
     if (!result.ok) return;
     assert.equal(result.source, 'partial-provider');
     assert.equal(result.person.filmography[0]?.title, 'Старый фильм');
-    const update = calls.updates[0] as { data?: { profileUpdatedAt?: unknown } };
+    const update = calls.updates[0] as { data?: { profileUpdatedAt?: unknown; profileRefreshAttemptedAt?: unknown } };
     assert.equal(update.data?.profileUpdatedAt, null);
+    assert.equal(update.data?.profileRefreshAttemptedAt, NOW);
 });
 
-test('partial refresh clears TTL when cached filmography JSON is invalid and retries next request', async () => {
+test('partial refresh clears TTL but uses retry backoff on the next request', async () => {
     const recentlyUpdatedAt = new Date('2026-08-19T12:00:00.000Z');
     const { calls, store } = createStore({
         id: 'person-local-42',
@@ -778,9 +897,11 @@ test('partial refresh clears TTL when cached filmography JSON is invalid and ret
 
     assert.equal(first.ok, true);
     assert.equal(second.ok, true);
-    assert.equal(loads, 2);
+    assert.equal(loads, 1);
+    assert.equal(second.ok, true);
+    if (second.ok) assert.equal(second.source, 'stale-cache');
     assert.equal((calls.updates[0] as { data?: { profileUpdatedAt?: unknown } }).data?.profileUpdatedAt, null);
-    assert.equal((calls.updates[1] as { data?: { profileUpdatedAt?: unknown } }).data?.profileUpdatedAt, null);
+    assert.equal(calls.updates.length, 1);
 });
 
 test('failed first refresh leaves compact person untouched and returns unavailable', async () => {
@@ -814,9 +935,48 @@ test('failed first refresh leaves compact person untouched and returns unavailab
         ok: false,
         error: 'Профиль персоны временно недоступен',
     });
-    assert.deepEqual(calls.updates, []);
+    assert.deepEqual(calls.updates, [ {
+        where: { id: 'person-local-42' },
+        data: { profileRefreshAttemptedAt: NOW },
+    } ]);
     assert.equal(compactPerson.name, 'Компактное имя');
     assert.equal(compactPerson.photoUrl, 'https://example.com/compact.jpg');
+});
+
+test('failed attempt timestamp persistence is best-effort without cached profile', async () => {
+    const { store } = createStore({
+        id: 'person-attempt-write-fails',
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: 'Компактное имя',
+        originalName: null,
+        photoUrl: null,
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [ 'actor' ],
+        facts: [],
+        filmography: null,
+        profileUpdatedAt: null,
+        profileRefreshAttemptedAt: null,
+    });
+    store.person.update = async () => {
+        throw new Error('database unavailable');
+    };
+
+    const result = await resolvePersonProfile({
+        personId: 'person-attempt-write-fails',
+        store,
+        now: NOW,
+        loadFresh: async () => null,
+    });
+
+    assert.deepEqual(result, {
+        ok: false,
+        error: 'Профиль персоны временно недоступен',
+    });
 });
 
 test('provider refresh recovers a profile with malformed persisted fields', async () => {
@@ -896,7 +1056,10 @@ test('failed recovery does not return malformed persisted profile', async () => 
         ok: false,
         error: 'Профиль персоны временно недоступен',
     });
-    assert.deepEqual(calls.updates, []);
+    assert.deepEqual(calls.updates, [ {
+        where: { id: 'person-local-42' },
+        data: { profileRefreshAttemptedAt: NOW },
+    } ]);
 });
 
 for (const [ caseName, malformedName ] of [
@@ -980,5 +1143,133 @@ test('failed provider recovery does not expose malformed persisted name', async 
         ok: false,
         error: 'Профиль персоны временно недоступен',
     });
-    assert.deepEqual(calls.updates, []);
+    assert.deepEqual(calls.updates, [ {
+        where: { id: 'person-local-42' },
+        data: { profileRefreshAttemptedAt: NOW },
+    } ]);
+});
+
+test('concurrent refreshes for one local person share one provider promise', async () => {
+    const person = {
+        id: 'person-coalesced',
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: 'Компактное имя',
+        originalName: null,
+        photoUrl: null,
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [ 'actor' ],
+        facts: [],
+        filmography: null,
+        profileUpdatedAt: null,
+        profileRefreshAttemptedAt: null,
+    };
+    const { store } = createStore(person);
+    const pending = deferred<{ profile: PersonProfile; complete: true }>();
+    let loads = 0;
+    const loadFresh = async () => {
+        loads += 1;
+        return pending.promise;
+    };
+
+    const first = resolvePersonProfile({ personId: person.id, store, now: NOW, loadFresh });
+    const second = resolvePersonProfile({ personId: person.id, store, now: NOW, loadFresh });
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(loads, 1);
+
+    pending.resolve({ profile: cachedProfile, complete: true });
+    const results = await Promise.all([ first, second ]);
+    assert.ok(results.every((result) => result.ok));
+});
+
+test('concurrent refreshes for different local people do not collide', async () => {
+    const makePerson = (id: string, externalId: string) => ({
+        id,
+        provider: 'kinopoisk-dev',
+        externalId,
+        name: `Персона ${id}`,
+        originalName: null,
+        photoUrl: null,
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [ 'actor' ],
+        facts: [],
+        filmography: null,
+        profileUpdatedAt: null,
+        profileRefreshAttemptedAt: null,
+    });
+    const firstPerson = makePerson('person-a', '42');
+    const secondPerson = makePerson('person-b', '43');
+    const firstStore = createStore(firstPerson).store;
+    const secondStore = createStore(secondPerson).store;
+    const pending = deferred<{ profile: PersonProfile; complete: true }>();
+    let loads = 0;
+    const loadFresh = async () => {
+        loads += 1;
+        return pending.promise;
+    };
+
+    const first = resolvePersonProfile({ personId: firstPerson.id, store: firstStore, now: NOW, loadFresh });
+    const second = resolvePersonProfile({ personId: secondPerson.id, store: secondStore, now: NOW, loadFresh });
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(loads, 2);
+
+    pending.resolve({ profile: cachedProfile, complete: true });
+    await Promise.all([ first, second ]);
+});
+
+test('failed coalesced promise is cleaned up and retries after backoff', async () => {
+    const person = {
+        id: 'person-retry',
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: 'Компактное имя',
+        originalName: null,
+        photoUrl: null,
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [ 'actor' ],
+        facts: [],
+        filmography: null,
+        profileUpdatedAt: null,
+        profileRefreshAttemptedAt: null,
+    };
+    const { store } = createStore(person);
+    let loads = 0;
+    const loadFresh = async () => {
+        loads += 1;
+        if (loads === 1) throw new Error('provider failed');
+        return { profile: cachedProfile, complete: true as const };
+    };
+
+    const first = await resolvePersonProfile({ personId: person.id, store, now: NOW, loadFresh });
+    const blocked = await resolvePersonProfile({
+        personId: person.id,
+        store,
+        now: new Date(NOW.getTime() + RETRY_BACKOFF_MS - 1),
+        loadFresh,
+    });
+    const retried = await resolvePersonProfile({
+        personId: person.id,
+        store,
+        now: new Date(NOW.getTime() + RETRY_BACKOFF_MS + 1),
+        loadFresh,
+    });
+
+    assert.equal(first.ok, false);
+    assert.equal(blocked.ok, false);
+    assert.equal(retried.ok, true);
+    assert.equal(loads, 2);
 });

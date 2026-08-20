@@ -9,13 +9,15 @@ export type PersonSnapshotSource =
 
 type CachedPersonSnapshot = {
     profile: PersonProfile;
-    updatedAt: Date;
+    updatedAt: Date | null;
 };
 
 type ResolvePersonSnapshotInput = {
     cached: CachedPersonSnapshot | null;
     now: Date;
     maxAgeMs: number;
+    refreshAttemptedAt?: Date | null;
+    retryBackoffMs?: number;
     loadFresh: () => Promise<PersonProfileLoadResult | null>;
 };
 
@@ -23,13 +25,23 @@ export async function resolvePersonSnapshot({
     cached,
     now,
     maxAgeMs,
+    refreshAttemptedAt = null,
+    retryBackoffMs = 0,
     loadFresh,
 }: ResolvePersonSnapshotInput): Promise<{
     source: PersonSnapshotSource;
     profile: PersonProfile | null;
 }> {
-    if (cached && now.getTime() - cached.updatedAt.getTime() <= maxAgeMs) {
+    if (cached?.updatedAt && now.getTime() - cached.updatedAt.getTime() <= maxAgeMs) {
         return { source: 'fresh-cache', profile: cached.profile };
+    }
+    if (
+        refreshAttemptedAt
+        && now.getTime() - refreshAttemptedAt.getTime() < retryBackoffMs
+    ) {
+        return cached
+            ? { source: 'stale-cache', profile: cached.profile }
+            : { source: 'unavailable', profile: null };
     }
 
     let fresh: PersonProfileLoadResult | null = null;

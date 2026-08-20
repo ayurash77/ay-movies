@@ -16,6 +16,10 @@ import type { MovieFormFields } from '@/lib/movie-data';
 import { getMovie, updateMovie } from '@/server/movies';
 import { loadMovieLookupDetails, lookupMovieCandidates, type MovieLookupCandidate } from '@/server/movie-lookup';
 import { normalizeGenreOptions } from '@/lib/genre-groups';
+import {
+    hasUsableMovieLookupDetails,
+    movieLookupFormMetadata,
+} from '@/lib/movie-lookup-details';
 import type { MovieLookupDetails } from '@/lib/movie-lookup-types';
 
 function movieToFormDefaults(movie: Awaited<ReturnType<typeof getMovie>>): Partial<MovieFormFields> {
@@ -47,7 +51,8 @@ function mergeLookupDefaults(
     current: Partial<MovieFormFields>,
     lookup: LookupCandidate,
 ): Partial<MovieFormFields> {
-    const hasSnapshot = hasDetailedSeasons(lookup) && lookup.seasons.length > 0;
+    const metadata = movieLookupFormMetadata(lookup, current);
+    const hasSnapshot = metadata.metadataImportSucceeded && lookup.kind === 'SERIES';
 
     return {
         ...current,
@@ -69,11 +74,9 @@ function mergeLookupDefaults(
             : current.episodesPerSeason,
         metadataProvider: lookup.provider,
         metadataExternalId: lookup.externalId ?? null,
-        seriesSeasons: hasSnapshot ? lookup.seasons : current.seriesSeasons,
-        externalRatings: hasDetailedSeasons(lookup)
-            ? lookup.externalRatings ?? undefined
-            : current.externalRatings,
-        cast: hasDetailedSeasons(lookup) ? lookup.cast : current.cast,
+        seriesSeasons: metadata.seriesSeasons,
+        externalRatings: metadata.externalRatings,
+        cast: metadata.cast,
     };
 }
 
@@ -87,12 +90,6 @@ function canLoadCandidateDetails(candidate: MovieLookupCandidate) {
 
 function hasDetailedSeasons(candidate: LookupCandidate): candidate is MovieLookupDetails {
     return 'seasons' in candidate;
-}
-
-function hasSuccessfulMetadataImport(candidate: LookupCandidate) {
-    if (!hasDetailedSeasons(candidate)) return false;
-    if (candidate.kind === 'SERIES') return candidate.seasons.length > 0;
-    return candidate.kind === 'MOVIE' || candidate.kind === 'CARTOON';
 }
 
 export const Route = createFileRoute('/movies/$movieId_/edit')({
@@ -191,7 +188,7 @@ function EditMoviePage() {
                     data: { provider: candidate.provider, externalId: candidate.externalId! },
                 });
 
-                if (detailedResult.ok && (detailedResult.movie.kind !== 'SERIES' || detailedResult.movie.seasons.length > 0)) {
+                if (detailedResult.ok && hasUsableMovieLookupDetails(detailedResult.movie)) {
                     selectedCandidate = detailedResult.movie;
                 } else if (!detailedResult.ok || candidate.kind === 'SERIES') {
                     toast.warning('Подробные данные о сериях недоступны. Использованы основные данные.');
@@ -200,7 +197,8 @@ function EditMoviePage() {
 
             if (generation !== requestGeneration.current) return;
 
-            const metadataImportSucceeded = hasSuccessfulMetadataImport(selectedCandidate);
+            const metadataImportSucceeded = movieLookupFormMetadata(selectedCandidate)
+                .metadataImportSucceeded;
             setFormDefaults((current) => mergeLookupDefaults(current, selectedCandidate));
             setMetadataImportSucceeded(metadataImportSucceeded);
             setSubmitImportedSeriesSnapshot(

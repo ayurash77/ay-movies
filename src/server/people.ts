@@ -11,6 +11,7 @@ import {
 import { resolvePersonSnapshot } from '@/lib/person-cache';
 
 const PERSON_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+export const PERSON_REFRESH_RETRY_BACKOFF_MS = 15 * 60 * 1000;
 const personProfileIdentitySchema = personProfileSchema.pick({
     provider: true,
     externalId: true,
@@ -34,9 +35,10 @@ type PersonProfileRow = {
     facts: string[];
     filmography: unknown;
     profileUpdatedAt: Date | null;
+    profileRefreshAttemptedAt: Date | null;
 };
 
-type PersonUpdateData = {
+type PersonUpdateData = Partial<{
     name: string;
     originalName: string | null;
     photoUrl: string | null;
@@ -49,7 +51,8 @@ type PersonUpdateData = {
     facts: string[];
     filmography: PersonFilmographyEntry[];
     profileUpdatedAt: Date | null;
-};
+    profileRefreshAttemptedAt: Date;
+}>;
 
 export type PersonProfileStore = {
     person: {
@@ -75,6 +78,7 @@ type ResolvePersonProfileInput = {
     store: PersonProfileStore;
     now?: Date;
     maxAgeMs?: number;
+    retryBackoffMs?: number;
     loadFresh: (provider: string, externalId: string) => Promise<PersonProfileLoadResult | null>;
 };
 
@@ -94,7 +98,29 @@ const personSelect: Record<keyof PersonProfileRow, true> = {
     facts: true,
     filmography: true,
     profileUpdatedAt: true,
+    profileRefreshAttemptedAt: true,
 };
+
+const personRefreshPromises = new Map<string, Promise<PersonProfileLoadResult | null>>();
+
+function coalescedPersonRefresh(
+    personId: string,
+    loadFresh: () => Promise<PersonProfileLoadResult | null>,
+) {
+    const existing = personRefreshPromises.get(personId);
+    if (existing) return existing;
+
+    let pending!: Promise<PersonProfileLoadResult | null>;
+    pending = Promise.resolve()
+        .then(loadFresh)
+        .finally(() => {
+            if (personRefreshPromises.get(personId) === pending) {
+                personRefreshPromises.delete(personId);
+            }
+        });
+    personRefreshPromises.set(personId, pending);
+    return pending;
+}
 
 function dateString(value: Date | null) {
     return value?.toISOString().slice(0, 10) ?? null;
@@ -218,6 +244,7 @@ export async function resolvePersonProfile({
     store,
     now = new Date(),
     maxAgeMs = PERSON_CACHE_MAX_AGE_MS,
+    retryBackoffMs = PERSON_REFRESH_RETRY_BACKOFF_MS,
     loadFresh,
 }: ResolvePersonProfileInput) {
     const row = await store.person.findUnique({
@@ -233,21 +260,37 @@ export async function resolvePersonProfile({
         return { ok: false as const, error: 'Профиль персоны временно недоступен' };
     }
 
-    const cached = compact && row.profileUpdatedAt && parsedFilmography.success
+    const cached = compact && parsedFilmography.success
         ? { profile: compact, updatedAt: row.profileUpdatedAt }
         : null;
+    let refreshWasAttempted = false;
     const snapshot = await resolvePersonSnapshot({
         cached,
         now,
         maxAgeMs,
+        refreshAttemptedAt: row.profileRefreshAttemptedAt,
+        retryBackoffMs,
         loadFresh: async () => {
-            const fresh = await loadFresh(row.provider, row.externalId);
+            refreshWasAttempted = true;
+            const fresh = await coalescedPersonRefresh(row.id, () => (
+                loadFresh(row.provider, row.externalId)
+            ));
             if (!fresh) return null;
             const profile = mergeFreshProfile(compact, identity, fresh.profile, fresh.complete);
             return profile ? { profile, complete: fresh.complete } : null;
         },
     });
     if (!snapshot.profile) {
+        if (refreshWasAttempted) {
+            try {
+                await store.person.update({
+                    where: { id: row.id },
+                    data: { profileRefreshAttemptedAt: now },
+                });
+            } catch {
+                // Attempt tracking is best-effort and must not change the unavailable response.
+            }
+        }
         return { ok: false as const, error: 'Профиль персоны временно недоступен' };
     }
 
@@ -271,10 +314,20 @@ export async function resolvePersonProfile({
                     profileUpdatedAt: snapshot.source === 'provider'
                         ? now
                         : cached?.updatedAt ?? null,
+                    profileRefreshAttemptedAt: now,
                 },
             });
         } catch {
             // Cache persistence must not make freshly loaded provider data unavailable.
+        }
+    } else if (refreshWasAttempted) {
+        try {
+            await store.person.update({
+                where: { id: row.id },
+                data: { profileRefreshAttemptedAt: now },
+            });
+        } catch {
+            // A failed attempt must not make a valid stale profile unavailable.
         }
     }
 

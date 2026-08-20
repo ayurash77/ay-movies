@@ -78,7 +78,7 @@ export function MovieRatings({
                         votes={externalRatings.russianCritics.votes}
                     />
                 ) : null}
-                <div className="col-span-full flex min-h-24 flex-col justify-between gap-2 bg-card p-3 sm:col-span-2">
+                <div className="flex min-h-24 flex-col justify-between gap-2 bg-card p-3">
                     <div className="flex items-start justify-between gap-2">
                         <span className="text-xs font-medium text-muted-foreground">AY Movies</span>
                         <span className="text-xs tabular-nums text-muted-foreground">

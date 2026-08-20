@@ -90,14 +90,18 @@ test('successful detailed lookup carries rich metadata snapshots through the for
     const editRoute = read('src/routes/movies/$movieId_.edit.tsx');
     const server = read('src/server/movies.ts');
 
+    assert.match(newRoute, /movieLookupFormMetadata/);
+    assert.match(editRoute, /movieLookupFormMetadata/);
+    assert.doesNotMatch(newRoute, /result\.movie\.seasons\.length > 0/);
+    assert.doesNotMatch(editRoute, /detailedResult\.movie\.seasons\.length > 0/);
+
     assert.match(dataTypes, /externalRatings\?: ExternalRatings/);
     assert.match(dataTypes, /cast\?: MovieCastMember\[\]/);
-    assert.match(newRoute, /externalRatings: 'externalRatings' in candidate[\s\S]*candidate\.externalRatings/);
-    assert.match(newRoute, /cast: 'cast' in candidate \? candidate\.cast/);
+    assert.match(newRoute, /externalRatings: metadata\.externalRatings/);
+    assert.match(newRoute, /cast: metadata\.cast/);
     assert.match(editRoute, /externalRatings: movie\.externalRatings/);
     assert.match(editRoute, /cast: movie\.cast/);
-    assert.match(editRoute, /externalRatings: hasDetailedSeasons\(lookup\)[\s\S]*lookup\.externalRatings/);
-    assert.match(editRoute, /cast: hasDetailedSeasons\(lookup\)[\s\S]*lookup\.cast/);
+    assert.match(editRoute, /movieLookupFormMetadata\(lookup, current\)/);
     assert.match(
         form,
         /externalRatings: metadataImportSucceeded \? defaults\?\.externalRatings : undefined/,

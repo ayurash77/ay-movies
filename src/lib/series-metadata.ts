@@ -83,6 +83,13 @@ export function normalizeSeriesMetadata(seasons: readonly SeriesSeasonMetadata[]
     return normalizedSeasons.sort((left, right) => left.number - right.number);
 }
 
+export function normalizeUsableSeriesMetadata(
+    seasons: readonly SeriesSeasonMetadata[],
+): SeriesSeasonMetadata[] {
+    const normalized = normalizeSeriesMetadata(seasons);
+    return normalized.some((season) => season.episodes.length > 0) ? normalized : [];
+}
+
 export function seriesMetadataSummary(seasons: readonly SeriesSeasonMetadata[]) {
     return {
         seasonsCount: seasons.length,
