@@ -37,7 +37,8 @@ Compose project; при старте контейнера выполняется
 
 Runtime env: `/opt/ayurash/env/ay-movies.env`. Нужны `DATABASE_URL`,
 `SESSION_SECRET`, `WEB_ALLOWED_HOSTS` и `S3_*`. OpenAI не используется:
-`movie-lookup.ts` получает данные из Wikipedia/Wikidata без токенов.
+`movie-lookup.ts` получает кандидатов из `kinopoisk.dev`, если задан
+`KINOPOISK_DEV_TOKEN`, и из Wikipedia/Wikidata как fallback.
 
 ## Архитектура
 

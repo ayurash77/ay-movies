@@ -24,7 +24,7 @@
 - Каталог фильтрует выбранный жанр через URL search param `genre`; счетчик в header берется из `searchMovies().total`, не из клиентского callback.
 - Detail `/movies/$movieId` принимает search param `from`; back button ведет в этот безопасный внутренний URL или `/`.
 - Для сериалов detail показывает вкладки `О сериале` и `Сезоны и серии`; реальные названия эпизодов пока не хранятся, поэтому список строится из `episodesPerSeason`.
-- Edit `/movies/$movieId/edit` без обрамляющей Card-панели; кнопка `Обновить данные` подтягивает текущий `lookupMovie` и ремонтирует `MovieForm` через `formVersion`.
+- Add/Edit `/movies/new` и `/movies/$movieId/edit` показывают `LookupCandidates` перед применением метаданных; данные мержатся в `MovieForm` только после выбора карточки. Кнопки `Отмена` и `Сохранить/Добавить` живут в закрепленном нижнем `MovieFormFooter`.
 
 ## Dashboard/Friends
 

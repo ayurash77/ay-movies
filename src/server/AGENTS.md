@@ -16,7 +16,7 @@
 - `session.ts` — server-only cookie/session helpers.
 - `password.ts` — scrypt hashing.
 - `movies.ts` — каталог, поиск, пагинация, CRUD, рейтинги, watch lists.
-- `movie-lookup.ts` — автозаполнение без AI tokens через Wikipedia/Wikidata; сначала пробует точную страницу, затем search с retry, фильтрует не-media сущности, для сериалов берет год из `P580`, сезоны из `P2437`, общее число серий из `P1113`.
+- `movie-lookup.ts` — `lookupMovieCandidates` для выбора источника данных перед автозаполнением; `lookupMovie` оставлен совместимым wrapper. Providers лежат в `movie-lookup-providers/`: `kinopoisk.dev` работает при `KINOPOISK_DEV_TOKEN`, Wikipedia/Wikidata остается fallback без токенов.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
 - `notifications.ts` — уведомления для фильмов, комментариев и chat messages.
 - `chat.ts` — общий global thread, direct threads только с друзьями, polling data, read counters, replies/images/edit/delete.
