@@ -2,13 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { MovieDetails } from '@/lib/movie-data';
-import type { SeriesEpisodeMetadata } from '@/lib/series-metadata';
+import type { SeriesEpisodeMetadata, SeriesSeasonMetadata } from '@/lib/series-metadata';
 import { cn } from '@/lib/utils';
 
-type SeasonEpisodes = {
+type SeasonEpisodes = SeriesSeasonMetadata & {
     id: string;
-    number: number;
-    episodes: SeriesEpisodeMetadata[];
 };
 
 const russianDateFormatter = new Intl.DateTimeFormat('ru-RU', {
@@ -25,7 +23,50 @@ function formatAirDate(value: string | null | undefined) {
     return Number.isNaN(date.getTime()) ? null : russianDateFormatter.format(date);
 }
 
-function legacySeasons(movie: Pick<MovieDetails, 'seasonsCount' | 'episodesPerSeason'>): SeasonEpisodes[] {
+function episodeContentFingerprint(episode: SeriesEpisodeMetadata) {
+    return [
+        episode.number,
+        episode.name ?? null,
+        episode.originalName ?? null,
+        episode.description ?? null,
+        episode.originalDescription ?? null,
+        episode.airDate ?? null,
+        episode.stillUrl ?? null,
+    ];
+}
+
+function seasonContentFingerprint(season: SeriesSeasonMetadata) {
+    return JSON.stringify([
+        season.number,
+        season.name ?? null,
+        season.originalName ?? null,
+        season.description ?? null,
+        season.originalDescription ?? null,
+        season.airDate ?? null,
+        season.durationMin ?? null,
+        season.posterUrl ?? null,
+        season.episodes.map(episodeContentFingerprint).sort((left, right) => (
+            JSON.stringify(left).localeCompare(JSON.stringify(right))
+        )),
+    ]);
+}
+
+function withContentIds(seasons: readonly SeriesSeasonMetadata[]): SeasonEpisodes[] {
+    const occurrences = new Map<string, number>();
+
+    return seasons.map((season) => {
+        const fingerprint = seasonContentFingerprint(season);
+        const occurrence = occurrences.get(fingerprint) ?? 0;
+        occurrences.set(fingerprint, occurrence + 1);
+
+        return {
+            ...season,
+            id: `season-${fingerprint}-${occurrence}`,
+        };
+    });
+}
+
+function legacySeasons(movie: Pick<MovieDetails, 'seasonsCount' | 'episodesPerSeason'>): SeriesSeasonMetadata[] {
     const seasonCount = Math.max(movie.seasonsCount ?? 0, movie.episodesPerSeason.length);
 
     return Array.from({ length: seasonCount }, (_, seasonIndex) => {
@@ -33,8 +74,14 @@ function legacySeasons(movie: Pick<MovieDetails, 'seasonsCount' | 'episodesPerSe
         const episodeCount = movie.episodesPerSeason[seasonIndex] ?? 0;
 
         return {
-            id: `season-${number}-${seasonIndex}`,
             number,
+            name: null,
+            originalName: null,
+            description: null,
+            originalDescription: null,
+            airDate: null,
+            durationMin: null,
+            posterUrl: null,
             episodes: Array.from({ length: episodeCount }, (_, episodeIndex) => ({
                 number: episodeIndex + 1,
                 name: null,
@@ -86,12 +133,8 @@ function EpisodeRow({ episode, seriesTitle }: { episode: SeriesEpisodeMetadata; 
 export function SeriesSeasons({ movie }: { movie: MovieDetails }) {
     const seasons = useMemo<SeasonEpisodes[]>(() => (
         movie.seriesSeasons.length > 0
-            ? movie.seriesSeasons.map((season, seasonIndex) => ({
-                id: `season-${season.number}-${seasonIndex}`,
-                number: season.number,
-                episodes: season.episodes,
-            }))
-            : legacySeasons(movie)
+            ? withContentIds(movie.seriesSeasons)
+            : withContentIds(legacySeasons(movie))
     ), [ movie ]);
     const [ activeSeasonId, setActiveSeasonId ] = useState(seasons[0]?.id ?? '');
     const activeSeason = seasons.find((season) => season.id === activeSeasonId) ?? seasons[0];
