@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
     normalizeSeriesMetadata,
     seriesMetadataSummary,
+    seriesSummaryWriteData,
     seriesSnapshotWriteData,
 } from '../src/lib/series-metadata';
 
@@ -55,6 +56,44 @@ test('builds nested Prisma create data for a detailed series snapshot', () => {
     assert.equal(writeData[0].episodes.create[0].airDate?.toISOString(), '2022-04-01T00:00:00.000Z');
     assert.equal(writeData[0].episodes.create[0].stillUrl, 'https://example.test/one.jpg');
     assert.deepEqual(seriesSnapshotWriteData([]), []);
+});
+
+test('preserves existing series summary when an update has no detail or legacy summary input', () => {
+    const snapshot = normalizeSeriesMetadata([
+        { number: 1, episodes: [ { number: 1 }, { number: 2 } ] },
+    ]);
+
+    assert.deepEqual(seriesSummaryWriteData({
+        kind: 'SERIES',
+        seasons: [],
+        preserveMissingLegacy: true,
+    }), {});
+    assert.deepEqual(seriesSummaryWriteData({
+        kind: 'SERIES',
+        seasons: [],
+        legacySeasonsCount: null,
+        legacyEpisodesPerSeason: [],
+        preserveMissingLegacy: true,
+    }), {
+        seasonsCount: null,
+        episodesPerSeason: [],
+    });
+    assert.deepEqual(seriesSummaryWriteData({
+        kind: 'SERIES',
+        seasons: snapshot,
+        preserveMissingLegacy: true,
+    }), {
+        seasonsCount: 1,
+        episodesPerSeason: [ 2 ],
+    });
+    assert.deepEqual(seriesSummaryWriteData({
+        kind: 'MOVIE',
+        seasons: snapshot,
+        preserveMissingLegacy: true,
+    }), {
+        seasonsCount: null,
+        episodesPerSeason: [],
+    });
 });
 
 test('persists detailed snapshots transactionally and reads ordered rows', async () => {

@@ -21,7 +21,7 @@ import {
 } from '@/lib/movie-lookup-types';
 import {
     normalizeSeriesMetadata,
-    seriesMetadataSummary,
+    seriesSummaryWriteData,
     seriesSnapshotWriteData,
 } from '@/lib/series-metadata';
 import { toServedUploadUrl } from '@/lib/upload-url';
@@ -414,9 +414,17 @@ function detailedSeriesSnapshot(data: z.output<typeof movieFieldsSchema>) {
 function toMovieData(
     data: z.output<typeof movieFieldsSchema>,
     seriesSeasons = detailedSeriesSnapshot(data),
+    preserveMissingSeriesSummary = false,
 ) {
     const kind = data.kind ?? 'MOVIE';
-    const summary = seriesSeasons.length ? seriesMetadataSummary(seriesSeasons) : null;
+    const legacySeasonsCount = data.seasonsCount === undefined
+        ? undefined
+        : data.seasonsCount === '' ? null : data.seasonsCount;
+    const legacyEpisodesPerSeason = data.episodesPerSeason === undefined
+        ? undefined
+        : splitList(data.episodesPerSeason)
+            .map(Number)
+            .filter((value) => Number.isInteger(value) && value > 0);
 
     return {
         title: data.title,
@@ -432,13 +440,13 @@ function toMovieData(
         genres: uniqueItems(data.genres ?? []),
         starring: splitList(data.starring),
         durationMin: data.durationMin === '' ? null : data.durationMin ?? null,
-        seasonsCount: kind === 'SERIES'
-            ? summary?.seasonsCount ?? (data.seasonsCount === '' ? null : data.seasonsCount ?? null)
-            : null,
-        episodesPerSeason: kind === 'SERIES'
-            ? summary?.episodesPerSeason
-                ?? splitList(data.episodesPerSeason).map(Number).filter((value) => Number.isInteger(value) && value > 0)
-            : [],
+        ...seriesSummaryWriteData({
+            kind,
+            seasons: seriesSeasons,
+            legacySeasonsCount,
+            legacyEpisodesPerSeason,
+            preserveMissingLegacy: preserveMissingSeriesSummary,
+        }),
     };
 }
 
@@ -580,7 +588,7 @@ export const updateMovie = createServerFn({ method: 'POST' })
 
         const { movieId, ...fields } = data;
         const seriesSeasons = detailedSeriesSnapshot(fields);
-        const movieData = toMovieData(fields, seriesSeasons);
+        const movieData = toMovieData(fields, seriesSeasons, true);
         const duplicate = await findDuplicateMovie(db, movieData, movieId);
         if (duplicate) {
             return {
@@ -620,7 +628,7 @@ export const updateMovie = createServerFn({ method: 'POST' })
                     return;
                 }
 
-                // An absent or empty detailed snapshot preserves existing episode rows.
+                // An absent or empty detailed snapshot preserves existing episode rows and summary fields.
                 await tx.movie.update({
                     where: { id: movieId },
                     data: { ...movieData, ...metadataData },

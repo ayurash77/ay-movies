@@ -89,6 +89,42 @@ export function seriesMetadataSummary(seasons: readonly SeriesSeasonMetadata[]) 
     };
 }
 
+type SeriesSummaryWriteInput = {
+    kind: 'MOVIE' | 'SERIES' | 'CARTOON';
+    seasons: readonly SeriesSeasonMetadata[];
+    legacySeasonsCount?: number | null;
+    legacyEpisodesPerSeason?: readonly number[];
+    preserveMissingLegacy?: boolean;
+};
+
+export function seriesSummaryWriteData({
+    kind,
+    seasons,
+    legacySeasonsCount,
+    legacyEpisodesPerSeason,
+    preserveMissingLegacy = false,
+}: SeriesSummaryWriteInput): {
+    seasonsCount?: number | null;
+    episodesPerSeason?: number[];
+} {
+    if (kind !== 'SERIES') {
+        return { seasonsCount: null, episodesPerSeason: [] };
+    }
+
+    if (seasons.length > 0) {
+        return seriesMetadataSummary(seasons);
+    }
+
+    return {
+        ...(!preserveMissingLegacy || legacySeasonsCount !== undefined
+            ? { seasonsCount: legacySeasonsCount ?? null }
+            : {}),
+        ...(!preserveMissingLegacy || legacyEpisodesPerSeason !== undefined
+            ? { episodesPerSeason: [ ...(legacyEpisodesPerSeason ?? []) ] }
+            : {}),
+    };
+}
+
 export function seriesSnapshotWriteData(seasons: readonly SeriesSeasonMetadata[]) {
     return seasons.map((season) => ({
         number: season.number,
