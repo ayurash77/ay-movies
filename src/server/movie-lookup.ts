@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 
-import { movieKindOptions } from '@/lib/movie-data';
+import { type MovieLookup } from '@/lib/movie-lookup-types';
 import {
     buildLookupAttempts,
     claimDuration,
@@ -15,25 +15,6 @@ import {
     type LookupLang,
     type LookupWikidataEntity,
 } from '@/lib/movie-lookup-utils';
-
-const lookupResultSchema = z.object({
-    found: z.boolean(),
-    kind: z.enum(movieKindOptions).optional(),
-    title: z.string().nullish(),
-    originalTitle: z.string().nullish(),
-    year: z.number().int().nullish(),
-    country: z.string().nullish(),
-    description: z.string().nullish(),
-    director: z.string().nullish(),
-    genres: z.array(z.string()).nullish(),
-    starring: z.array(z.string()).nullish(),
-    durationMin: z.number().int().nullish(),
-    seasonsCount: z.number().int().nullish(),
-    episodesPerSeason: z.array(z.number().int()).nullish(),
-    posterUrl: z.string().nullish(),
-});
-
-export type MovieLookup = z.infer<typeof lookupResultSchema>;
 
 type WikiSearchResponse = {
     query?: { search?: Array<{ title: string }> };

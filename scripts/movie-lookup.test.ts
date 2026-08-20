@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+    movieLookupCandidateSchema,
+    type MovieLookupCandidate,
+} from '../src/lib/movie-lookup-types';
+import {
     buildLookupAttempts,
     claimSeriesInfo,
     claimSeriesParts,
@@ -42,6 +46,33 @@ function entity(
         },
     };
 }
+
+test('movie lookup candidate schema accepts provider metadata', () => {
+    const candidate: MovieLookupCandidate = {
+        found: true,
+        provider: 'kinopoisk-dev',
+        providerLabel: 'Кинопоиск',
+        externalId: '123',
+        sourceUrl: 'https://www.kinopoisk.ru/film/123/',
+        confidence: 92,
+        rating: 8.4,
+        kind: 'SERIES',
+        title: 'Игра престолов',
+        originalTitle: 'Game of Thrones',
+        year: 2011,
+        country: 'США, Великобритания',
+        description: 'Описание',
+        director: null,
+        genres: [ 'драма', 'фэнтези' ],
+        starring: [ 'Питер Динклэйдж' ],
+        durationMin: 55,
+        seasonsCount: 8,
+        episodesPerSeason: [ 10, 10, 10, 10, 10, 10, 7, 6 ],
+        posterUrl: 'https://example.com/poster.jpg',
+    };
+
+    assert.deepEqual(movieLookupCandidateSchema.parse(candidate), candidate);
+});
 
 test('movie lookup tries exact title before film suffix and includes series suffixes', () => {
     assert.deepEqual(buildLookupAttempts('медленные лошади').slice(0, 6), [
