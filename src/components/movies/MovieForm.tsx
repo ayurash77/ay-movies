@@ -17,6 +17,7 @@ type MovieFormProps = {
     formId?: string;
     hideSubmitButton?: boolean;
     onSubmittingChange?: (isSubmitting: boolean) => void;
+    submitImportedSeriesSnapshot?: boolean;
 };
 
 type FieldRowProps = {
@@ -119,6 +120,7 @@ export function MovieForm({
     formId,
     hideSubmitButton,
     onSubmittingChange,
+    submitImportedSeriesSnapshot = false,
 }: MovieFormProps) {
     const [ isSubmitting, setIsSubmitting ] = useState(false);
     const [ kind, setKind ] = useState<NonNullable<MovieFormFields['kind']>>(defaults?.kind ?? 'MOVIE');
@@ -184,7 +186,7 @@ export function MovieForm({
                 episodesPerSeason: defaults?.episodesPerSeason,
                 metadataProvider: defaults?.metadataProvider,
                 metadataExternalId: defaults?.metadataExternalId,
-                seriesSeasons: defaults?.seriesSeasons,
+                seriesSeasons: submitImportedSeriesSnapshot ? defaults?.seriesSeasons : undefined,
             });
         } catch {
             toast.error('Проверьте правильность заполнения полей');

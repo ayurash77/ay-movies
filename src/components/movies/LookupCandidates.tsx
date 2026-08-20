@@ -43,6 +43,7 @@ export function LookupCandidates({
     loadingCandidateKey,
 }: LookupCandidatesProps) {
     if (!candidates.length) return null;
+    const isBusy = Boolean(loadingCandidateKey);
 
     return (
         <section className="flex flex-col gap-3" aria-label="Найденные варианты">
@@ -51,7 +52,7 @@ export function LookupCandidates({
                     <p className="text-sm font-semibold">Выберите источник данных</p>
                     <p className="text-xs text-muted-foreground">Форма заполнится только после выбора карточки.</p>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={onReject}>
+                <Button type="button" variant="outline" size="sm" onClick={onReject} disabled={isBusy}>
                     Не подходит
                 </Button>
             </div>
@@ -111,7 +112,7 @@ export function LookupCandidates({
                                         size="sm"
                                         className="mt-auto self-start"
                                         onClick={() => onSelect(candidate)}
-                                        disabled={Boolean(loadingCandidateKey)}
+                                        disabled={isBusy}
                                     >
                                         {isApplyingCandidate ? 'Загрузка...' : 'Заполнить'}
                                     </Button>

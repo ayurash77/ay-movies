@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -85,18 +85,27 @@ function NewMoviePage() {
     const [ lookupDefaults, setLookupDefaults ] = useState<Partial<MovieFormFields>>({ kind: kind ?? 'MOVIE' });
     const [ lookupCandidates, setLookupCandidates ] = useState<LookupCandidate[]>([]);
     const [ loadingCandidateKey, setLoadingCandidateKey ] = useState<string | null>(null);
+    const [ submitImportedSeriesSnapshot, setSubmitImportedSeriesSnapshot ] = useState(false);
+    const requestGeneration = useRef(0);
+    const applyingCandidateRef = useRef(false);
+    const lookingUpRef = useRef(false);
+    const isApplyingCandidate = loadingCandidateKey !== null;
 
     useEffect(() => {
         setLookupDefaults((current) => ({ ...current, kind: kind ?? current.kind ?? 'MOVIE' }));
     }, [ kind ]);
 
     const handleLookup = async () => {
+        if (applyingCandidateRef.current || lookingUpRef.current) return;
         const title = lookupTitle.trim();
         if (title.length < 2) return;
 
+        const generation = ++requestGeneration.current;
+        lookingUpRef.current = true;
         setIsLookingUp(true);
         try {
             const result = await lookupMovieCandidates({ data: { title, kind } });
+            if (generation !== requestGeneration.current || applyingCandidateRef.current) return;
             if (!result.ok) {
                 toast.error(result.error);
                 setLookupCandidates([]);
@@ -105,15 +114,27 @@ function NewMoviePage() {
 
             setLookupCandidates(result.candidates);
         } catch {
-            toast.error('Не удалось получить данные');
+            if (generation === requestGeneration.current && !applyingCandidateRef.current) {
+                toast.error('Не удалось получить данные');
+            }
         } finally {
-            setIsLookingUp(false);
+            if (generation === requestGeneration.current) {
+                lookingUpRef.current = false;
+                setIsLookingUp(false);
+            }
         }
     };
 
     const applyLookupCandidate = async (candidate: LookupCandidate) => {
+        if (applyingCandidateRef.current) return;
+
         const candidateKey = lookupCandidateKey(candidate);
+        const generation = ++requestGeneration.current;
+        applyingCandidateRef.current = true;
+        lookingUpRef.current = false;
+        setIsLookingUp(false);
         setLoadingCandidateKey(candidateKey);
+        setSubmitImportedSeriesSnapshot(false);
 
         try {
             let selectedCandidate = candidate;
@@ -129,16 +150,37 @@ function NewMoviePage() {
                 }
             }
 
+            if (generation !== requestGeneration.current) return;
+
             setLookupDefaults(candidateToFormDefaults(selectedCandidate, lookupTitle.trim()));
+            setSubmitImportedSeriesSnapshot(
+                hasDetailedSeasons(selectedCandidate)
+                && selectedCandidate.kind === 'SERIES'
+                && selectedCandidate.seasons.length > 0,
+            );
             setLookupCandidates([]);
             toast.success('Данные подставлены — проверьте перед сохранением');
         } catch {
+            if (generation !== requestGeneration.current) return;
             toast.warning('Подробные данные недоступны. Использованы основные данные.');
             setLookupDefaults(candidateToFormDefaults(candidate, lookupTitle.trim()));
+            setSubmitImportedSeriesSnapshot(false);
             setLookupCandidates([]);
         } finally {
-            setLoadingCandidateKey(null);
+            if (generation === requestGeneration.current) {
+                setLoadingCandidateKey(null);
+            }
+            applyingCandidateRef.current = false;
         }
+    };
+
+    const rejectLookupCandidates = () => {
+        if (applyingCandidateRef.current) return;
+
+        ++requestGeneration.current;
+        lookingUpRef.current = false;
+        setIsLookingUp(false);
+        setLookupCandidates([]);
     };
 
     const handleCancel = () => {
@@ -177,7 +219,7 @@ function NewMoviePage() {
                             maxLength={200}
                             aria-label="Название для поиска"
                         />
-                        <Button type="submit" disabled={isLookingUp || lookupTitle.trim().length < 2}>
+                        <Button type="submit" disabled={isLookingUp || isApplyingCandidate || lookupTitle.trim().length < 2}>
                             {isLookingUp ? 'Ищем…' : 'Найти'}
                         </Button>
                     </form>
@@ -186,7 +228,7 @@ function NewMoviePage() {
 
             <LookupCandidates
                 candidates={lookupCandidates}
-                onReject={() => setLookupCandidates([])}
+                onReject={rejectLookupCandidates}
                 onSelect={applyLookupCandidate}
                 loadingCandidateKey={loadingCandidateKey}
             />
@@ -199,6 +241,7 @@ function NewMoviePage() {
                         hideSubmitButton
                         onSubmittingChange={setIsSubmitting}
                         defaults={lookupDefaults}
+                        submitImportedSeriesSnapshot={submitImportedSeriesSnapshot}
                         submitLabel="Добавить фильм"
                         onSubmit={async (fields) => {
                             const result = await createMovie({ data: fields });

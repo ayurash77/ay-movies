@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { createFileRoute, Link, notFound, redirect, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -111,11 +111,19 @@ function EditMoviePage() {
     const [ isSubmitting, setIsSubmitting ] = useState(false);
     const [ lookupCandidates, setLookupCandidates ] = useState<LookupCandidate[]>([]);
     const [ loadingCandidateKey, setLoadingCandidateKey ] = useState<string | null>(null);
+    const [ submitImportedSeriesSnapshot, setSubmitImportedSeriesSnapshot ] = useState(false);
+    const requestGeneration = useRef(0);
+    const applyingCandidateRef = useRef(false);
+    const refreshingRef = useRef(false);
+    const isApplyingCandidate = loadingCandidateKey !== null;
 
     const handleRefreshMetadata = async () => {
+        if (applyingCandidateRef.current || refreshingRef.current) return;
         const title = String(formDefaults.title || movie.title).trim();
         if (!title) return;
 
+        const generation = ++requestGeneration.current;
+        refreshingRef.current = true;
         setIsRefreshing(true);
         try {
             if (movie.metadataProvider && movie.metadataExternalId) {
@@ -125,6 +133,7 @@ function EditMoviePage() {
                         externalId: movie.metadataExternalId,
                     },
                 });
+                if (generation !== requestGeneration.current || applyingCandidateRef.current) return;
                 if (detailedResult.ok) {
                     setLookupCandidates([ detailedResult.movie ]);
                     return;
@@ -133,6 +142,7 @@ function EditMoviePage() {
             }
 
             const result = await lookupMovieCandidates({ data: { title, kind: formDefaults.kind } });
+            if (generation !== requestGeneration.current || applyingCandidateRef.current) return;
             if (!result.ok) {
                 toast.error(result.error);
                 setLookupCandidates([]);
@@ -140,15 +150,25 @@ function EditMoviePage() {
             }
             setLookupCandidates(result.candidates);
         } catch {
-            toast.error('Не удалось обновить данные');
+            if (generation === requestGeneration.current && !applyingCandidateRef.current) {
+                toast.error('Не удалось обновить данные');
+            }
         } finally {
-            setIsRefreshing(false);
+            if (generation === requestGeneration.current) {
+                refreshingRef.current = false;
+                setIsRefreshing(false);
+            }
         }
     };
 
     const applyLookupCandidate = async (candidate: LookupCandidate) => {
+        if (applyingCandidateRef.current || refreshingRef.current) return;
+
         const candidateKey = lookupCandidateKey(candidate);
+        const generation = ++requestGeneration.current;
+        applyingCandidateRef.current = true;
         setLoadingCandidateKey(candidateKey);
+        setSubmitImportedSeriesSnapshot(false);
 
         try {
             let selectedCandidate = candidate;
@@ -164,18 +184,39 @@ function EditMoviePage() {
                 }
             }
 
+            if (generation !== requestGeneration.current) return;
+
             setFormDefaults((current) => mergeLookupDefaults(current, selectedCandidate));
+            setSubmitImportedSeriesSnapshot(
+                hasDetailedSeasons(selectedCandidate)
+                && selectedCandidate.kind === 'SERIES'
+                && selectedCandidate.seasons.length > 0,
+            );
             setLookupCandidates([]);
             setFormVersion((current) => current + 1);
             toast.success('Данные подставлены — проверьте перед сохранением');
         } catch {
+            if (generation !== requestGeneration.current) return;
             toast.warning('Подробные данные недоступны. Использованы основные данные.');
             setFormDefaults((current) => mergeLookupDefaults(current, candidate));
+            setSubmitImportedSeriesSnapshot(false);
             setLookupCandidates([]);
             setFormVersion((current) => current + 1);
         } finally {
-            setLoadingCandidateKey(null);
+            if (generation === requestGeneration.current) {
+                setLoadingCandidateKey(null);
+            }
+            applyingCandidateRef.current = false;
         }
+    };
+
+    const rejectLookupCandidates = () => {
+        if (applyingCandidateRef.current) return;
+
+        ++requestGeneration.current;
+        refreshingRef.current = false;
+        setIsRefreshing(false);
+        setLookupCandidates([]);
     };
 
     if (!movie.canEdit) {
@@ -205,7 +246,7 @@ function EditMoviePage() {
                         variant="outline"
                         size="sm"
                         onClick={handleRefreshMetadata}
-                        disabled={isRefreshing}
+                        disabled={isRefreshing || isApplyingCandidate}
                     >
                         <RefreshCw className={isRefreshing ? 'animate-spin' : undefined}/>
                         {isRefreshing ? 'Обновление…' : 'Обновить данные'}
@@ -213,7 +254,7 @@ function EditMoviePage() {
                 </div>
                 <LookupCandidates
                     candidates={lookupCandidates}
-                    onReject={() => setLookupCandidates([])}
+                    onReject={rejectLookupCandidates}
                     onSelect={applyLookupCandidate}
                     loadingCandidateKey={loadingCandidateKey}
                 />
@@ -224,6 +265,7 @@ function EditMoviePage() {
                     onSubmittingChange={setIsSubmitting}
                     submitLabel="Сохранить"
                     defaults={formDefaults}
+                    submitImportedSeriesSnapshot={submitImportedSeriesSnapshot}
                     onSubmit={async (fields) => {
                         const result = await updateMovie({ data: { ...fields, movieId: movie.id } });
                         if (result.ok) {
