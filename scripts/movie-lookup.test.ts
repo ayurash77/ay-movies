@@ -6,6 +6,7 @@ import {
     movieLookupCandidateSchema,
     type MovieLookupCandidate,
 } from '../src/lib/movie-lookup-types';
+import { mapKinopoiskMovie } from '../src/server/movie-lookup-providers/kinopoisk-dev';
 import {
     buildLookupAttempts,
     claimSeriesInfo,
@@ -82,6 +83,51 @@ test('movie lookup exposes candidate entrypoint and keeps compatibility wrapper'
     assert.match(source, /lookupWikidataCandidates/);
     assert.match(source, /lookupMovie = createServerFn/);
     assert.match(source, /candidates\[0\]/);
+});
+
+test('kinopoisk mapper normalizes series metadata', () => {
+    const candidate = mapKinopoiskMovie({
+        id: 464963,
+        type: 'tv-series',
+        name: 'Игра престолов',
+        alternativeName: 'Game of Thrones',
+        year: 2011,
+        description: 'Борьба за Железный трон.',
+        shortDescription: null,
+        movieLength: 55,
+        rating: { kp: 9.0 },
+        poster: { previewUrl: 'https://example.com/got.jpg', url: 'https://example.com/got-full.jpg' },
+        countries: [ { name: 'США' }, { name: 'Великобритания' } ],
+        genres: [ { name: 'драма' }, { name: 'фэнтези' } ],
+        persons: [
+            { name: 'Дэвид Бениофф', profession: 'режиссеры', enProfession: 'director' },
+            { name: 'Питер Динклэйдж', profession: 'актеры', enProfession: 'actor' },
+        ],
+    }, [ 10, 10, 10, 10, 10, 10, 7, 6 ]);
+
+    assert.equal(candidate?.provider, 'kinopoisk-dev');
+    assert.equal(candidate?.kind, 'SERIES');
+    assert.equal(candidate?.title, 'Игра престолов');
+    assert.equal(candidate?.originalTitle, 'Game of Thrones');
+    assert.equal(candidate?.country, 'США, Великобритания');
+    assert.deepEqual(candidate?.episodesPerSeason, [ 10, 10, 10, 10, 10, 10, 7, 6 ]);
+    assert.equal(candidate?.seasonsCount, 8);
+    assert.equal(candidate?.sourceUrl, 'https://www.kinopoisk.ru/film/464963/');
+});
+
+test('kinopoisk mapper detects cartoons from type and genres', () => {
+    const candidate = mapKinopoiskMovie({
+        id: 1,
+        type: 'cartoon',
+        name: 'ВАЛЛ-И',
+        alternativeName: 'WALL-E',
+        year: 2008,
+        genres: [ { name: 'мультфильм' }, { name: 'фантастика' } ],
+        countries: [],
+        persons: [],
+    });
+
+    assert.equal(candidate?.kind, 'CARTOON');
 });
 
 test('movie lookup tries exact title before film suffix and includes series suffixes', () => {
