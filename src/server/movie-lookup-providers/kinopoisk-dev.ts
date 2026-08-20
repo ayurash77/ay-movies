@@ -122,7 +122,9 @@ function externalId(value: KinopoiskPerson['id']) {
     }
 
     const normalized = text(value);
-    return normalized || null;
+    return /^[1-9]\d*$/.test(normalized) && Number.isSafeInteger(Number(normalized))
+        ? normalized
+        : null;
 }
 
 function rating(value: number | null | undefined, votes: number | null | undefined) {

@@ -210,6 +210,16 @@ test('kinopoisk rich metadata rejects invalid fields and duplicate cast', () => 
     assert.equal(rich.cast.at(-1)?.externalId, '108');
 });
 
+test('kinopoisk rich metadata rejects invalid string person ids', () => {
+    for (const id of [ 'abc', '0', '-1' ]) {
+        const rich = mapKinopoiskRichMetadata({
+            persons: [ { id, name: `Некорректный ID ${id}`, enProfession: 'actor' } ],
+        });
+
+        assert.deepEqual(rich.cast, [], `person id ${id} must be rejected`);
+    }
+});
+
 test('kinopoisk detailed season mapper preserves localized episode metadata', () => {
     assert.deepEqual(mapKinopoiskSeasons([
         {
