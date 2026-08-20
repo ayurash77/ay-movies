@@ -88,3 +88,27 @@ export function seriesMetadataSummary(seasons: readonly SeriesSeasonMetadata[]) 
         episodesPerSeason: seasons.map((season) => season.episodes.length),
     };
 }
+
+export function seriesSnapshotWriteData(seasons: readonly SeriesSeasonMetadata[]) {
+    return seasons.map((season) => ({
+        number: season.number,
+        name: season.name,
+        originalName: season.originalName,
+        description: season.description,
+        originalDescription: season.originalDescription,
+        airDate: season.airDate ? new Date(`${season.airDate}T00:00:00.000Z`) : null,
+        durationMin: season.durationMin,
+        posterUrl: season.posterUrl,
+        episodes: {
+            create: season.episodes.map((episode) => ({
+                number: episode.number,
+                name: episode.name,
+                originalName: episode.originalName,
+                description: episode.description,
+                originalDescription: episode.originalDescription,
+                airDate: episode.airDate ? new Date(`${episode.airDate}T00:00:00.000Z`) : null,
+                stillUrl: episode.stillUrl,
+            })),
+        },
+    }));
+}

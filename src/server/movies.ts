@@ -14,6 +14,16 @@ import {
 } from '@/lib/movie-data';
 import { GENRE_OPTIONS, normalizeGenre } from '@/lib/genre-groups';
 import { buildMovieDedupeKey } from '@/lib/movie-dedupe';
+import {
+    lookupProviderSchema,
+    seriesSeasonMetadataSchema,
+    type LookupProvider,
+} from '@/lib/movie-lookup-types';
+import {
+    normalizeSeriesMetadata,
+    seriesMetadataSummary,
+    seriesSnapshotWriteData,
+} from '@/lib/series-metadata';
 import { toServedUploadUrl } from '@/lib/upload-url';
 
 const MOVIE_PAGE_SIZE = 48;
@@ -267,7 +277,13 @@ export const getMovie = createServerFn({ method: 'GET' })
 
         const movie = await db.movie.findUnique({
             where: { id: data.id },
-            include: { createdBy: { select: { name: true } } },
+            include: {
+                createdBy: { select: { name: true } },
+                seriesSeasons: {
+                    orderBy: { number: 'asc' },
+                    include: { episodes: { orderBy: { number: 'asc' } } },
+                },
+            },
         });
         if (!movie) return null;
 
@@ -305,10 +321,28 @@ export const getMovie = createServerFn({ method: 'GET' })
             durationMin: movie.durationMin,
             seasonsCount: movie.seasonsCount,
             episodesPerSeason: movie.episodesPerSeason,
-            metadataProvider: null,
-            metadataExternalId: null,
-            metadataUpdatedAt: null,
-            seriesSeasons: [],
+            metadataProvider: lookupProviderSchema.safeParse(movie.metadataProvider).data ?? null,
+            metadataExternalId: movie.metadataExternalId,
+            metadataUpdatedAt: movie.metadataUpdatedAt?.toISOString() ?? null,
+            seriesSeasons: movie.seriesSeasons.map((season) => ({
+                number: season.number,
+                name: season.name,
+                originalName: season.originalName,
+                description: season.description,
+                originalDescription: season.originalDescription,
+                airDate: season.airDate?.toISOString().slice(0, 10) ?? null,
+                durationMin: season.durationMin,
+                posterUrl: toServedUploadUrl(season.posterUrl),
+                episodes: season.episodes.map((episode) => ({
+                    number: episode.number,
+                    name: episode.name,
+                    originalName: episode.originalName,
+                    description: episode.description,
+                    originalDescription: episode.originalDescription,
+                    airDate: episode.airDate?.toISOString().slice(0, 10) ?? null,
+                    stillUrl: toServedUploadUrl(episode.stillUrl),
+                })),
+            })),
             createdAt: movie.createdAt.toISOString(),
             addedBy: movie.createdBy?.name ?? null,
             avgRating: agg._avg.value ?? 0,
@@ -363,14 +397,27 @@ const movieFieldsSchema = z.object({
     durationMin: z.union([ z.literal(''), z.coerce.number().int().min(1).max(1000) ]).optional(),
     seasonsCount: z.union([ z.literal(''), z.coerce.number().int().min(1).max(100) ]).optional(),
     episodesPerSeason: z.string().trim().max(500).optional(),
+    metadataProvider: lookupProviderSchema.nullish(),
+    metadataExternalId: z.string().trim().max(100).nullish(),
+    seriesSeasons: z.array(seriesSeasonMetadataSchema).max(100).optional(),
 });
 
 function splitList(value: string | undefined) {
     return value ? value.split(',').map((item) => item.trim()).filter(Boolean) : [];
 }
 
-function toMovieData(data: z.output<typeof movieFieldsSchema>) {
+function detailedSeriesSnapshot(data: z.output<typeof movieFieldsSchema>) {
     const kind = data.kind ?? 'MOVIE';
+    return kind === 'SERIES' ? normalizeSeriesMetadata(data.seriesSeasons ?? []) : [];
+}
+
+function toMovieData(
+    data: z.output<typeof movieFieldsSchema>,
+    seriesSeasons = detailedSeriesSnapshot(data),
+) {
+    const kind = data.kind ?? 'MOVIE';
+    const summary = seriesSeasons.length ? seriesMetadataSummary(seriesSeasons) : null;
+
     return {
         title: data.title,
         kind,
@@ -385,16 +432,42 @@ function toMovieData(data: z.output<typeof movieFieldsSchema>) {
         genres: uniqueItems(data.genres ?? []),
         starring: splitList(data.starring),
         durationMin: data.durationMin === '' ? null : data.durationMin ?? null,
-        seasonsCount: data.kind === 'SERIES' && data.seasonsCount !== ''
-            ? data.seasonsCount ?? null
+        seasonsCount: kind === 'SERIES'
+            ? summary?.seasonsCount ?? (data.seasonsCount === '' ? null : data.seasonsCount ?? null)
             : null,
-        episodesPerSeason: data.kind === 'SERIES'
-            ? splitList(data.episodesPerSeason).map(Number).filter((value) => Number.isInteger(value) && value > 0)
+        episodesPerSeason: kind === 'SERIES'
+            ? summary?.episodesPerSeason
+                ?? splitList(data.episodesPerSeason).map(Number).filter((value) => Number.isInteger(value) && value > 0)
             : [],
     };
 }
 
 type MovieWriteData = ReturnType<typeof toMovieData>;
+
+function explicitMetadataData(
+    data: z.output<typeof movieFieldsSchema>,
+    kind: MovieWriteData['kind'],
+    hasDetailedSeriesSnapshot: boolean,
+) {
+    const providerWasSubmitted = data.metadataProvider !== undefined;
+    const externalIdWasSubmitted = data.metadataExternalId !== undefined;
+    const sourceData: {
+        metadataProvider?: LookupProvider | null;
+        metadataExternalId?: string | null;
+        metadataUpdatedAt?: Date;
+    } = {};
+
+    if (providerWasSubmitted) sourceData.metadataProvider = data.metadataProvider ?? null;
+    if (externalIdWasSubmitted) sourceData.metadataExternalId = data.metadataExternalId ?? null;
+
+    if (kind === 'SERIES' && hasDetailedSeriesSnapshot) {
+        sourceData.metadataUpdatedAt = new Date();
+    } else if (kind !== 'SERIES' && (providerWasSubmitted || externalIdWasSubmitted)) {
+        sourceData.metadataUpdatedAt = new Date();
+    }
+
+    return sourceData;
+}
 
 const duplicateMovieSelect = {
     id: true,
@@ -446,7 +519,8 @@ export const createMovie = createServerFn({ method: 'POST' })
             return { ok: false as const, error: 'Требуется авторизация' };
         }
 
-        const movieData = toMovieData(data);
+        const seriesSeasons = detailedSeriesSnapshot(data);
+        const movieData = toMovieData(data, seriesSeasons);
         const duplicate = await findDuplicateMovie(db, movieData);
         if (duplicate) {
             return { ok: true as const, movieId: duplicate.id, existing: true as const };
@@ -454,9 +528,16 @@ export const createMovie = createServerFn({ method: 'POST' })
 
         let movie;
         try {
-            movie = await db.movie.create({
-                data: { ...movieData, createdById: user.id },
-            });
+            movie = await db.$transaction(async (tx) => tx.movie.create({
+                data: {
+                    ...movieData,
+                    ...explicitMetadataData(data, movieData.kind, seriesSeasons.length > 0),
+                    createdById: user.id,
+                    seriesSeasons: seriesSeasons.length > 0
+                        ? { create: seriesSnapshotWriteData(seriesSeasons) }
+                        : undefined,
+                },
+            }));
         } catch (error) {
             if (!isUniqueConstraintError(error)) throw error;
             const existing = await db.movie.findUnique({
@@ -498,7 +579,8 @@ export const updateMovie = createServerFn({ method: 'POST' })
         }
 
         const { movieId, ...fields } = data;
-        const movieData = toMovieData(fields);
+        const seriesSeasons = detailedSeriesSnapshot(fields);
+        const movieData = toMovieData(fields, seriesSeasons);
         const duplicate = await findDuplicateMovie(db, movieData, movieId);
         if (duplicate) {
             return {
@@ -509,7 +591,41 @@ export const updateMovie = createServerFn({ method: 'POST' })
         }
 
         try {
-            await db.movie.update({ where: { id: movieId }, data: movieData });
+            await db.$transaction(async (tx) => {
+                const metadataData = explicitMetadataData(
+                    fields,
+                    movieData.kind,
+                    seriesSeasons.length > 0,
+                );
+
+                if (movieData.kind !== 'SERIES') {
+                    await tx.seriesSeason.deleteMany({ where: { movieId } });
+                    await tx.movie.update({
+                        where: { id: movieId },
+                        data: { ...movieData, ...metadataData },
+                    });
+                    return;
+                }
+
+                if (seriesSeasons.length > 0) {
+                    await tx.seriesSeason.deleteMany({ where: { movieId } });
+                    await tx.movie.update({
+                        where: { id: movieId },
+                        data: {
+                            ...movieData,
+                            ...metadataData,
+                            seriesSeasons: { create: seriesSnapshotWriteData(seriesSeasons) },
+                        },
+                    });
+                    return;
+                }
+
+                // An absent or empty detailed snapshot preserves existing episode rows.
+                await tx.movie.update({
+                    where: { id: movieId },
+                    data: { ...movieData, ...metadataData },
+                });
+            });
         } catch (error) {
             if (!isUniqueConstraintError(error)) throw error;
             const existing = await db.movie.findUnique({
