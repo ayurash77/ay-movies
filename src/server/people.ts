@@ -263,72 +263,70 @@ export async function resolvePersonProfile({
     const cached = compact && parsedFilmography.success
         ? { profile: compact, updatedAt: row.profileUpdatedAt }
         : null;
-    let refreshWasAttempted = false;
     const snapshot = await resolvePersonSnapshot({
         cached,
         now,
         maxAgeMs,
         refreshAttemptedAt: row.profileRefreshAttemptedAt,
         retryBackoffMs,
-        loadFresh: async () => {
-            refreshWasAttempted = true;
-            const fresh = await coalescedPersonRefresh(row.id, () => (
-                loadFresh(row.provider, row.externalId)
-            ));
-            if (!fresh) return null;
+        loadFresh: () => coalescedPersonRefresh(row.id, async () => {
+            const recordRefreshAttempt = async () => {
+                try {
+                    await store.person.update({
+                        where: { id: row.id },
+                        data: { profileRefreshAttemptedAt: now },
+                    });
+                } catch {
+                    // Attempt tracking is best-effort.
+                }
+            };
+
+            let fresh: PersonProfileLoadResult | null;
+            try {
+                fresh = await loadFresh(row.provider, row.externalId);
+            } catch (error) {
+                await recordRefreshAttempt();
+                throw error;
+            }
+            if (!fresh) {
+                await recordRefreshAttempt();
+                return null;
+            }
+
             const profile = mergeFreshProfile(compact, identity, fresh.profile, fresh.complete);
-            return profile ? { profile, complete: fresh.complete } : null;
-        },
-    });
-    if (!snapshot.profile) {
-        if (refreshWasAttempted) {
+            if (!profile) {
+                await recordRefreshAttempt();
+                return null;
+            }
+
             try {
                 await store.person.update({
                     where: { id: row.id },
-                    data: { profileRefreshAttemptedAt: now },
+                    data: {
+                        name: profile.name,
+                        originalName: profile.originalName,
+                        photoUrl: profile.photoUrl,
+                        sex: profile.sex,
+                        growthCm: profile.growthCm,
+                        birthDate: dateValue(profile.birthDate),
+                        deathDate: dateValue(profile.deathDate),
+                        birthPlace: profile.birthPlace,
+                        professions: profile.professions,
+                        facts: profile.facts,
+                        filmography: storedFilmography(profile.filmography),
+                        profileUpdatedAt: fresh.complete ? now : cached?.updatedAt ?? null,
+                        profileRefreshAttemptedAt: now,
+                    },
                 });
             } catch {
-                // Attempt tracking is best-effort and must not change the unavailable response.
+                // Cache persistence must not make freshly loaded provider data unavailable.
             }
-        }
-        return { ok: false as const, error: 'Профиль персоны временно недоступен' };
-    }
 
-    if (snapshot.source === 'provider' || snapshot.source === 'partial-provider') {
-        const profile = snapshot.profile;
-        try {
-            await store.person.update({
-                where: { id: row.id },
-                data: {
-                    name: profile.name,
-                    originalName: profile.originalName,
-                    photoUrl: profile.photoUrl,
-                    sex: profile.sex,
-                    growthCm: profile.growthCm,
-                    birthDate: dateValue(profile.birthDate),
-                    deathDate: dateValue(profile.deathDate),
-                    birthPlace: profile.birthPlace,
-                    professions: profile.professions,
-                    facts: profile.facts,
-                    filmography: storedFilmography(profile.filmography),
-                    profileUpdatedAt: snapshot.source === 'provider'
-                        ? now
-                        : cached?.updatedAt ?? null,
-                    profileRefreshAttemptedAt: now,
-                },
-            });
-        } catch {
-            // Cache persistence must not make freshly loaded provider data unavailable.
-        }
-    } else if (refreshWasAttempted) {
-        try {
-            await store.person.update({
-                where: { id: row.id },
-                data: { profileRefreshAttemptedAt: now },
-            });
-        } catch {
-            // A failed attempt must not make a valid stale profile unavailable.
-        }
+            return { profile, complete: fresh.complete };
+        }),
+    });
+    if (!snapshot.profile) {
+        return { ok: false as const, error: 'Профиль персоны временно недоступен' };
     }
 
     return {

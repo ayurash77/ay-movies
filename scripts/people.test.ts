@@ -1187,6 +1187,55 @@ test('concurrent refreshes for one local person share one provider promise', asy
     assert.ok(results.every((result) => result.ok));
 });
 
+test('concurrent refreshes stay coalesced until profile persistence completes', async () => {
+    const person = {
+        id: 'person-persistence-coalesced',
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: 'Компактное имя',
+        originalName: null,
+        photoUrl: null,
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [ 'actor' ],
+        facts: [],
+        filmography: null,
+        profileUpdatedAt: null,
+        profileRefreshAttemptedAt: null,
+    };
+    const { store } = createStore(person);
+    const provider = deferred<{ profile: PersonProfile; complete: true }>();
+    const updateStarted = deferred<void>();
+    const allowUpdate = deferred<void>();
+    let loads = 0;
+    store.person.update = async (args) => {
+        updateStarted.resolve();
+        await allowUpdate.promise;
+        Object.assign(person, args.data);
+        return {};
+    };
+    const loadFresh = async () => {
+        loads += 1;
+        return provider.promise;
+    };
+
+    const first = resolvePersonProfile({ personId: person.id, store, now: NOW, loadFresh });
+    provider.resolve({ profile: cachedProfile, complete: true });
+    await updateStarted.promise;
+
+    const second = resolvePersonProfile({ personId: person.id, store, now: NOW, loadFresh });
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(loads, 1);
+
+    allowUpdate.resolve();
+    const results = await Promise.all([ first, second ]);
+    assert.ok(results.every((result) => result.ok));
+});
+
 test('concurrent refreshes for different local people do not collide', async () => {
     const makePerson = (id: string, externalId: string) => ({
         id,
@@ -1270,6 +1319,43 @@ test('failed coalesced promise is cleaned up and retries after backoff', async (
 
     assert.equal(first.ok, false);
     assert.equal(blocked.ok, false);
+    assert.equal(retried.ok, true);
+    assert.equal(loads, 2);
+});
+
+test('coalescing entry is cleaned up after profile persistence failure', async () => {
+    const person = {
+        id: 'person-update-retry',
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: 'Компактное имя',
+        originalName: null,
+        photoUrl: null,
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [ 'actor' ],
+        facts: [],
+        filmography: null,
+        profileUpdatedAt: null,
+        profileRefreshAttemptedAt: null,
+    };
+    const { store } = createStore(person);
+    store.person.update = async () => {
+        throw new Error('database unavailable');
+    };
+    let loads = 0;
+    const loadFresh = async () => {
+        loads += 1;
+        return { profile: cachedProfile, complete: true as const };
+    };
+
+    const first = await resolvePersonProfile({ personId: person.id, store, now: NOW, loadFresh });
+    const retried = await resolvePersonProfile({ personId: person.id, store, now: NOW, loadFresh });
+
+    assert.equal(first.ok, true);
     assert.equal(retried.ok, true);
     assert.equal(loads, 2);
 });
