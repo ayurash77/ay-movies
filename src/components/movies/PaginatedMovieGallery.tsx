@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,6 +15,11 @@ type PaginatedMovieGalleryProps = {
     emptyText?: string;
     controlsStart?: ReactNode;
     controlsEnd?: ReactNode;
+    preferenceScope?: string;
+    userId?: string | null;
+    selectedGenre?: string | null;
+    onSelectedGenreChange?: (genre: string | null) => void;
+    onGenreCountChange?: (count: number | null) => void;
 };
 
 export function PaginatedMovieGallery({
@@ -23,6 +28,11 @@ export function PaginatedMovieGallery({
     emptyText,
     controlsStart,
     controlsEnd,
+    preferenceScope,
+    userId,
+    selectedGenre,
+    onSelectedGenreChange,
+    onGenreCountChange,
 }: PaginatedMovieGalleryProps) {
     const [ page, setPage ] = useState(initialPage);
     const [ isLoadingMore, setIsLoadingMore ] = useState(false);
@@ -35,7 +45,7 @@ export function PaginatedMovieGallery({
         setIsLoadingMore(false);
     }, [ initialPage, queryKey ]);
 
-    const handleLoadMore = async () => {
+    const handleLoadMore = useCallback(async () => {
         if (isLoadingMore || page.nextCursor === null) return;
         const requestQueryKey = queryKey;
         setIsLoadingMore(true);
@@ -58,9 +68,9 @@ export function PaginatedMovieGallery({
         } finally {
             setIsLoadingMore(false);
         }
-    };
+    }, [ isLoadingMore, page.nextCursor, query, queryKey ]);
 
-    const handleLoadCompleteSet = async () => {
+    const handleLoadCompleteSet = useCallback(async () => {
         if (isLoadingMore || page.nextCursor === null) return;
         const requestQueryKey = queryKey;
         let cursor: number | null = page.nextCursor;
@@ -95,7 +105,7 @@ export function PaginatedMovieGallery({
         } finally {
             setIsLoadingMore(false);
         }
-    };
+    }, [ isLoadingMore, page.nextCursor, page.total, query, queryKey ]);
 
     return (
         <div className="flex flex-col gap-5">
@@ -105,6 +115,11 @@ export function PaginatedMovieGallery({
                 controlsStart={controlsStart}
                 controlsEnd={controlsEnd}
                 onNeedCompleteSet={handleLoadCompleteSet}
+                preferenceScope={preferenceScope}
+                userId={userId}
+                selectedGenre={selectedGenre}
+                onSelectedGenreChange={onSelectedGenreChange}
+                onGenreCountChange={onGenreCountChange}
             />
             {page.total > 0 ? (
                 <div className="flex flex-col items-center gap-2">

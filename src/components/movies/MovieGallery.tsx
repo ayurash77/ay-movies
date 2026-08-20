@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, Filter, Layers2, RotateCcw } from 'lucide-react';
+import { Filter, Layers2, RotateCcw } from 'lucide-react';
 
+import { useAppHeaderToolbar } from '@/components/AppTitle';
 import { MovieCard } from '@/components/movies/MovieCard';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,6 +13,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { readCatalogPreferences, storeCatalogPreferences } from '@/lib/catalog-preferences';
 import { groupMoviesByGenres } from '@/lib/genre-groups';
 import type { MovieCardData } from '@/lib/movie-data';
 
@@ -21,6 +23,11 @@ type MovieGalleryProps = {
     controlsStart?: ReactNode;
     controlsEnd?: ReactNode;
     onNeedCompleteSet?: () => void;
+    preferenceScope?: string;
+    userId?: string | null;
+    selectedGenre?: string | null;
+    onSelectedGenreChange?: (genre: string | null) => void;
+    onGenreCountChange?: (count: number | null) => void;
 };
 
 const DOMESTIC_COUNTRIES = new Set([ 'россия', 'рф', 'ссср' ]);
@@ -107,12 +114,20 @@ export function MovieGallery({
     controlsStart,
     controlsEnd,
     onNeedCompleteSet,
+    preferenceScope = 'default',
+    userId,
+    selectedGenre,
+    onSelectedGenreChange,
+    onGenreCountChange,
 }: MovieGalleryProps) {
     const [ groupByOrigin, setGroupByOrigin ] = useState(true);
     const [ groupByCountry, setGroupByCountry ] = useState(false);
     const [ groupByGenre, setGroupByGenre ] = useState(false);
-    const [ selectedGenre, setSelectedGenre ] = useState<string | null>(null);
+    const [ selectedGenreState, setSelectedGenreState ] = useState<string | null>(null);
     const [ hiddenCountries, setHiddenCountries ] = useState<Set<string>>(() => new Set());
+    const [ loadedPreferenceKey, setLoadedPreferenceKey ] = useState<string | null>(null);
+    const currentSelectedGenre = selectedGenre ?? selectedGenreState;
+    const preferenceKey = `${userId ?? 'guest'}:${preferenceScope}`;
 
     const countries = useMemo(
         () => [ ...new Set(movies.map(primaryCountry)) ].sort((a, b) => a.localeCompare(b, 'ru')),
@@ -129,24 +144,68 @@ export function MovieGallery({
         [ visibleMovies ],
     );
 
-    const selectedGenreMovies = selectedGenre
-        ? genreGroups.find(([ genre ]) => genre === selectedGenre)?.[1] ?? null
+    const selectedGenreMovies = currentSelectedGenre
+        ? genreGroups.find(([ genre ]) => genre === currentSelectedGenre)?.[1] ?? null
         : null;
 
-    const toggleCountry = (country: string) => {
+    useEffect(() => {
+        const preferences = readCatalogPreferences(userId, preferenceScope);
+        setGroupByOrigin(preferences.groupByOrigin);
+        setGroupByCountry(preferences.groupByCountry);
+        setGroupByGenre(preferences.groupByGenre);
+        setHiddenCountries(new Set(preferences.hiddenCountries));
+        setLoadedPreferenceKey(preferenceKey);
+    }, [ preferenceKey, preferenceScope, userId ]);
+
+    useEffect(() => {
+        if (loadedPreferenceKey !== preferenceKey) return;
+        storeCatalogPreferences(userId, preferenceScope, {
+            groupByOrigin,
+            groupByCountry,
+            groupByGenre,
+            hiddenCountries: [ ...hiddenCountries ],
+        });
+    }, [ groupByCountry, groupByGenre, groupByOrigin, hiddenCountries, loadedPreferenceKey, preferenceKey, preferenceScope, userId ]);
+
+    useEffect(() => {
+        if (!currentSelectedGenre) {
+            onGenreCountChange?.(null);
+            return;
+        }
+        setGroupByGenre(true);
+        onNeedCompleteSet?.();
+    }, [ currentSelectedGenre, onGenreCountChange, onNeedCompleteSet ]);
+
+    useEffect(() => {
+        if (!currentSelectedGenre) return;
+        onGenreCountChange?.(selectedGenreMovies?.length ?? 0);
+    }, [ currentSelectedGenre, onGenreCountChange, selectedGenreMovies?.length ]);
+
+    const setSelectedGenreValue = useCallback((genre: string | null) => {
+        if (onSelectedGenreChange) onSelectedGenreChange(genre);
+        else setSelectedGenreState(genre);
+    }, [ onSelectedGenreChange ]);
+
+    const toggleCountry = useCallback((country: string) => {
         setHiddenCountries((current) => {
             const next = new Set(current);
             if (next.has(country)) next.delete(country);
             else next.add(country);
             return next;
         });
-    };
+    }, []);
 
-    const setGenreGrouping = (checked: boolean) => {
+    const setGenreGrouping = useCallback((checked: boolean) => {
         setGroupByGenre(checked);
-        setSelectedGenre(null);
+        setSelectedGenreValue(null);
         if (checked) onNeedCompleteSet?.();
-    };
+    }, [ onNeedCompleteSet, setSelectedGenreValue ]);
+
+    const handleSelectGenre = useCallback((genre: string) => {
+        setGroupByGenre(true);
+        setSelectedGenreValue(genre);
+        onNeedCompleteSet?.();
+    }, [ onNeedCompleteSet, setSelectedGenreValue ]);
 
     const renderCountryGroups = (items: MovieCardData[]) => {
         const groups = [ ...groupBy(items, primaryCountry).entries() ]
@@ -196,26 +255,10 @@ export function MovieGallery({
 
     const renderGenreMode = () => {
         if (!selectedGenreMovies) {
-            return <GenreCards groups={genreGroups} onSelect={setSelectedGenre}/>;
+            return <GenreCards groups={genreGroups} onSelect={handleSelectGenre}/>;
         }
 
-        return (
-            <div className="flex flex-col gap-5">
-                <div className="flex flex-wrap items-center gap-3">
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedGenre(null)}>
-                        <ArrowLeft/>
-                        Все жанры
-                    </Button>
-                    <div className="flex flex-col">
-                        <h2 className="text-xl font-bold">{selectedGenre}</h2>
-                        <span className="text-sm text-muted-foreground">
-                            {selectedGenreMovies.length} {selectedGenreMovies.length === 1 ? 'позиция' : 'позиций'}
-                        </span>
-                    </div>
-                </div>
-                {renderGroupedMovies(selectedGenreMovies)}
-            </div>
-        );
+        return renderGroupedMovies(selectedGenreMovies);
     };
 
     const renderMovies = () => {
@@ -231,58 +274,57 @@ export function MovieGallery({
         return renderGroupedMovies(visibleMovies);
     };
 
-    return (
-        <div className="flex flex-col gap-5">
-            <div className="flex items-center gap-2">
-                {controlsStart}
-                <div className="ml-auto flex shrink-0 items-center gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="icon" aria-label="Группировки" title="Группировки">
-                                <Layers2/>
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                                onSelect={() => {
-                                    setGroupByOrigin(true);
-                                    setGroupByCountry(true);
-                                    setGenreGrouping(true);
-                                }}
-                            >
-                                Отметить все
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                onSelect={() => {
-                                    setGroupByOrigin(false);
-                                    setGroupByCountry(false);
-                                    setGroupByGenre(false);
-                                    setSelectedGenre(null);
-                                }}
-                            >
-                                Снять все
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator/>
-                            <DropdownMenuCheckboxItem
-                                checked={groupByOrigin}
-                                onCheckedChange={(checked) => setGroupByOrigin(Boolean(checked))}
-                            >
-                                Отечественные / зарубежные
-                            </DropdownMenuCheckboxItem>
-                            <DropdownMenuCheckboxItem
-                                checked={groupByCountry}
-                                onCheckedChange={(checked) => setGroupByCountry(Boolean(checked))}
-                            >
-                                Страны
-                            </DropdownMenuCheckboxItem>
-                            <DropdownMenuCheckboxItem
-                                checked={groupByGenre}
-                                onCheckedChange={(checked) => setGenreGrouping(Boolean(checked))}
-                            >
-                                Жанры
-                            </DropdownMenuCheckboxItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+    const catalogControls = useMemo(() => (
+        <>
+            {controlsStart}
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" aria-label="Группировки" title="Группировки">
+                            <Layers2/>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                            onSelect={() => {
+                                setGroupByOrigin(true);
+                                setGroupByCountry(true);
+                                setGenreGrouping(true);
+                            }}
+                        >
+                            Отметить все
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onSelect={() => {
+                                setGroupByOrigin(false);
+                                setGroupByCountry(false);
+                                setGroupByGenre(false);
+                                setSelectedGenreValue(null);
+                            }}
+                        >
+                            Снять все
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator/>
+                        <DropdownMenuCheckboxItem
+                            checked={groupByOrigin}
+                            onCheckedChange={(checked) => setGroupByOrigin(Boolean(checked))}
+                        >
+                            Отечественные / зарубежные
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={groupByCountry}
+                            onCheckedChange={(checked) => setGroupByCountry(Boolean(checked))}
+                        >
+                            Страны
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={groupByGenre}
+                            onCheckedChange={(checked) => setGenreGrouping(Boolean(checked))}
+                        >
+                            Жанры
+                        </DropdownMenuCheckboxItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
 
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -316,8 +358,29 @@ export function MovieGallery({
                 </DropdownMenu>
 
                 {controlsEnd}
-                </div>
             </div>
+        </>
+    ), [
+        controlsEnd,
+        controlsStart,
+        countries,
+        groupByCountry,
+        groupByGenre,
+        groupByOrigin,
+        hiddenCountries,
+        setGenreGrouping,
+        setSelectedGenreValue,
+        toggleCountry,
+    ]);
+    const toolbarRegistered = useAppHeaderToolbar(catalogControls);
+
+    return (
+        <div className="flex flex-col gap-5">
+            {!toolbarRegistered ? (
+                <div className="flex items-center gap-2">
+                    {catalogControls}
+                </div>
+            ) : null}
 
             {renderMovies()}
         </div>

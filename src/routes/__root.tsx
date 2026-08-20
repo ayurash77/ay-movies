@@ -4,7 +4,7 @@ import { ArrowLeft, Film, Menu, Plus } from 'lucide-react';
 import { Toaster } from 'sonner';
 
 import appCss from '../styles.css?url';
-import { AppTitleProvider, useAppTitle } from '@/components/AppTitle';
+import { AppTitleProvider, useAppTitle, useAppToolbar } from '@/components/AppTitle';
 import { ProfileDialog } from '@/components/ProfileDialog';
 import { Sidebar } from '@/components/Sidebar';
 import { ThemeDialog } from '@/components/ThemeDialog';
@@ -53,6 +53,7 @@ function RootLayout() {
     const { user } = Route.useRouteContext();
     const { pathname, searchStr } = useLocation();
     const appTitle = useAppTitle();
+    const appToolbar = useAppToolbar();
     const [ isMobileMenuOpen, setIsMobileMenuOpen ] = useState(false);
     const [ isProfileOpen, setIsProfileOpen ] = useState(false);
     const [ isThemeOpen, setIsThemeOpen ] = useState(false);
@@ -145,31 +146,51 @@ function RootLayout() {
             <div className={cn('flex min-w-0 flex-1 flex-col bg-surface', isChatRoute && 'h-svh min-h-0 overflow-hidden')}>
                 <header
                     className={cn(
-                        'sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 shadow-[0_12px_30px_rgb(0_0_0/0.24)] backdrop-blur-md',
-                        isChatRoute ? 'bg-background/75' : 'bg-background/90',
+                        'sticky top-0 z-30 flex shrink-0 flex-col border-b border-border/60 bg-transparent shadow-[0_12px_30px_rgb(0_0_0/0.24)]',
+                        isChatRoute ? 'min-h-14' : appToolbar ? 'min-h-24' : 'min-h-14',
                     )}
                 >
-                    {mobileMenu}
-                    {appTitle?.mobileBackTo ? (
-                        <Button asChild variant="ghost" size="icon" className="md:hidden" aria-label="Назад">
-                            <Link to={appTitle.mobileBackTo}>
-                                <ArrowLeft/>
+                    <div
+                        aria-hidden="true"
+                        data-app-header-backdrop-blur
+                        className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[calc(100%+1rem)] backdrop-blur-md mask-[linear-gradient(to_bottom,black_0%,black_50%,rgba(0,0,0,0.55)_78%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_0%,black_50%,rgba(0,0,0,0.55)_78%,transparent_100%)]"
+                    />
+                    <div
+                        aria-hidden="true"
+                        data-app-header-backdrop-tint
+                        className={cn(
+                            'pointer-events-none absolute inset-x-0 top-0 z-0 h-[calc(100%+1rem)] mask-[linear-gradient(to_bottom,black_0%,black_10%,rgba(0,0,0,0.5)_75%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_0%,black_10%,rgba(0,0,0,0.5)_75%,transparent_100%)]',
+                            isChatRoute ? 'bg-background/75' : 'bg-background/95',
+                        )}
+                    />
+                    <div className="relative z-10 flex min-h-14 items-center gap-2 px-3">
+                        {mobileMenu}
+                        {appTitle?.mobileBackTo ? (
+                            <Button asChild variant="ghost" size="icon" className="md:hidden" aria-label="Назад">
+                                <Link to={appTitle.mobileBackTo}>
+                                    <ArrowLeft/>
+                                </Link>
+                            </Button>
+                        ) : null}
+                        {appTitle ? (
+                            <div className="min-w-0 truncate text-lg font-semibold tracking-tight">
+                                {appTitle.display ?? appTitle.title}
+                            </div>
+                        ) : (
+                            <Link to="/" className="flex items-center gap-2 text-base font-bold tracking-tight">
+                                <Film className="size-5 text-primary"/>
+                                <>
+                                    Movie<span className="text-primary">Nest</span>
+                                </>
                             </Link>
-                        </Button>
-                    ) : null}
-                    {appTitle ? (
-                        <div className="min-w-0 truncate text-lg font-semibold tracking-tight">
-                            {appTitle.title}
+                        )}
+                        {headerAddButton}
+                    </div>
+                    {appToolbar ? (
+                        <div data-app-header-toolbar className="relative z-10 flex min-w-0 items-center gap-2 overflow-x-auto px-3 pb-3">
+                            {appToolbar}
                         </div>
-                    ) : (
-                        <Link to="/" className="flex items-center gap-2 text-base font-bold tracking-tight">
-                            <Film className="size-5 text-primary"/>
-                            <>
-                                Movie<span className="text-primary">Nest</span>
-                            </>
-                        </Link>
-                    )}
-                    {headerAddButton}
+                    ) : null}
                 </header>
 
                 <main className={isChatRoute ? 'mx-auto flex h-[calc(100svh-3.5rem)] min-h-0 w-full max-w-6xl flex-1 overflow-hidden px-3 py-0 md:px-4 md:py-5' : 'mx-auto w-full max-w-6xl flex-1 px-4 py-5'}>
