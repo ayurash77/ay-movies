@@ -38,6 +38,9 @@ test('new movie page shows candidates before applying lookup data', () => {
     assert.match(source, /requestGeneration/);
     assert.match(source, /applyingCandidateRef/);
     assert.match(source, /submitImportedSeriesSnapshot/);
+    assert.match(source, /metadataImportSucceeded/);
+    assert.match(source, /setLookupCandidates\(\[\]\);[\s\S]*lookupMovieCandidates/);
+    assert.match(source, /if \(applyingCandidateRef\.current \|\| lookingUpRef\.current\) return/);
     assert.match(source, /disabled=\{isLookingUp \|\| isApplyingCandidate/);
     assert.doesNotMatch(source, /toast\.success\('Форма заполнена/);
 });
@@ -58,6 +61,7 @@ test('movie edit page refresh shows candidates before merge', () => {
     assert.match(source, /requestGeneration/);
     assert.match(source, /applyingCandidateRef/);
     assert.match(source, /submitImportedSeriesSnapshot/);
+    assert.match(source, /metadataImportSucceeded/);
     assert.match(source, /disabled=\{isRefreshing \|\| isApplyingCandidate\}/);
     assert.doesNotMatch(source, /toast\.success\('Данные обновлены'\)/);
 });
@@ -73,6 +77,10 @@ test('movie form keeps imported series data without manual season inputs', () =>
     assert.match(form, /metadataExternalId: defaults\?\.metadataExternalId/);
     assert.match(form, /submitImportedSeriesSnapshot\?: boolean/);
     assert.match(form, /seriesSeasons: submitImportedSeriesSnapshot \? defaults\?\.seriesSeasons : undefined/);
+    assert.match(form, /metadataImportSucceeded\?: boolean/);
+    assert.match(form, /metadataImportSucceeded,/);
+    assert.match(form, /submitDisabled\?: boolean/);
+    assert.match(form, /if \(submitDisabled\) return/);
 });
 
 test('movie form supports external sticky footer actions', () => {
@@ -87,6 +95,10 @@ test('movie form supports external sticky footer actions', () => {
     assert.match(footer, /fixed bottom-0/);
     assert.match(footer, /Отмена/);
     assert.match(footer, /form=\{formId\}/);
+    assert.match(footer, /disabled\?: boolean/);
+    assert.match(footer, /disabled=\{isSubmitting \|\| disabled\}/);
     assert.match(newRoute, /MovieFormFooter/);
     assert.match(editRoute, /MovieFormFooter/);
+    assert.match(newRoute, /disabled=\{isApplyingCandidate\}/);
+    assert.match(editRoute, /disabled=\{isApplyingCandidate\}/);
 });

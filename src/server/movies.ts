@@ -17,10 +17,10 @@ import { buildMovieDedupeKey } from '@/lib/movie-dedupe';
 import {
     lookupProviderSchema,
     seriesSeasonMetadataSchema,
-    type LookupProvider,
 } from '@/lib/movie-lookup-types';
 import {
     normalizeSeriesMetadata,
+    metadataImportWriteData,
     seriesSummaryWriteData,
     seriesSnapshotWriteData,
 } from '@/lib/series-metadata';
@@ -399,6 +399,7 @@ const movieFieldsSchema = z.object({
     episodesPerSeason: z.string().trim().max(500).optional(),
     metadataProvider: lookupProviderSchema.nullish(),
     metadataExternalId: z.string().trim().max(100).nullish(),
+    metadataImportSucceeded: z.boolean().optional(),
     seriesSeasons: z.array(seriesSeasonMetadataSchema).max(100).optional(),
 });
 
@@ -457,24 +458,18 @@ function explicitMetadataData(
     kind: MovieWriteData['kind'],
     hasDetailedSeriesSnapshot: boolean,
 ) {
-    const providerWasSubmitted = data.metadataProvider !== undefined;
-    const externalIdWasSubmitted = data.metadataExternalId !== undefined;
-    const sourceData: {
-        metadataProvider?: LookupProvider | null;
-        metadataExternalId?: string | null;
-        metadataUpdatedAt?: Date;
-    } = {};
+    const { shouldUpdateMetadataTimestamp, ...sourceData } = metadataImportWriteData({
+        kind,
+        metadataProvider: data.metadataProvider,
+        metadataExternalId: data.metadataExternalId,
+        metadataImportSucceeded: data.metadataImportSucceeded,
+        hasDetailedSeriesSnapshot,
+    });
 
-    if (providerWasSubmitted) sourceData.metadataProvider = data.metadataProvider ?? null;
-    if (externalIdWasSubmitted) sourceData.metadataExternalId = data.metadataExternalId ?? null;
-
-    if (kind === 'SERIES' && hasDetailedSeriesSnapshot) {
-        sourceData.metadataUpdatedAt = new Date();
-    } else if (kind !== 'SERIES' && (providerWasSubmitted || externalIdWasSubmitted)) {
-        sourceData.metadataUpdatedAt = new Date();
-    }
-
-    return sourceData;
+    return {
+        ...sourceData,
+        ...(shouldUpdateMetadataTimestamp ? { metadataUpdatedAt: new Date() } : {}),
+    };
 }
 
 const duplicateMovieSelect = {

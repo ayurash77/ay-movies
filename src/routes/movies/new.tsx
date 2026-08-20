@@ -75,6 +75,12 @@ function hasDetailedSeasons(candidate: LookupCandidate): candidate is MovieLooku
     return 'seasons' in candidate;
 }
 
+function hasSuccessfulMetadataImport(candidate: LookupCandidate) {
+    if (!hasDetailedSeasons(candidate)) return false;
+    if (candidate.kind === 'SERIES') return candidate.seasons.length > 0;
+    return candidate.kind === 'MOVIE' || candidate.kind === 'CARTOON';
+}
+
 function NewMoviePage() {
     const navigate = useNavigate();
     const { kind } = Route.useSearch();
@@ -86,6 +92,7 @@ function NewMoviePage() {
     const [ lookupCandidates, setLookupCandidates ] = useState<LookupCandidate[]>([]);
     const [ loadingCandidateKey, setLoadingCandidateKey ] = useState<string | null>(null);
     const [ submitImportedSeriesSnapshot, setSubmitImportedSeriesSnapshot ] = useState(false);
+    const [ metadataImportSucceeded, setMetadataImportSucceeded ] = useState(false);
     const requestGeneration = useRef(0);
     const applyingCandidateRef = useRef(false);
     const lookingUpRef = useRef(false);
@@ -101,6 +108,7 @@ function NewMoviePage() {
         if (title.length < 2) return;
 
         const generation = ++requestGeneration.current;
+        setLookupCandidates([]);
         lookingUpRef.current = true;
         setIsLookingUp(true);
         try {
@@ -126,7 +134,7 @@ function NewMoviePage() {
     };
 
     const applyLookupCandidate = async (candidate: LookupCandidate) => {
-        if (applyingCandidateRef.current) return;
+        if (applyingCandidateRef.current || lookingUpRef.current) return;
 
         const candidateKey = lookupCandidateKey(candidate);
         const generation = ++requestGeneration.current;
@@ -135,6 +143,7 @@ function NewMoviePage() {
         setIsLookingUp(false);
         setLoadingCandidateKey(candidateKey);
         setSubmitImportedSeriesSnapshot(false);
+        setMetadataImportSucceeded(false);
 
         try {
             let selectedCandidate = candidate;
@@ -152,11 +161,12 @@ function NewMoviePage() {
 
             if (generation !== requestGeneration.current) return;
 
+            const metadataImportSucceeded = hasSuccessfulMetadataImport(selectedCandidate);
             setLookupDefaults(candidateToFormDefaults(selectedCandidate, lookupTitle.trim()));
+            setMetadataImportSucceeded(metadataImportSucceeded);
             setSubmitImportedSeriesSnapshot(
-                hasDetailedSeasons(selectedCandidate)
-                && selectedCandidate.kind === 'SERIES'
-                && selectedCandidate.seasons.length > 0,
+                metadataImportSucceeded
+                && selectedCandidate.kind === 'SERIES',
             );
             setLookupCandidates([]);
             toast.success('Данные подставлены — проверьте перед сохранением');
@@ -165,6 +175,7 @@ function NewMoviePage() {
             toast.warning('Подробные данные недоступны. Использованы основные данные.');
             setLookupDefaults(candidateToFormDefaults(candidate, lookupTitle.trim()));
             setSubmitImportedSeriesSnapshot(false);
+            setMetadataImportSucceeded(false);
             setLookupCandidates([]);
         } finally {
             if (generation === requestGeneration.current) {
@@ -242,6 +253,8 @@ function NewMoviePage() {
                         onSubmittingChange={setIsSubmitting}
                         defaults={lookupDefaults}
                         submitImportedSeriesSnapshot={submitImportedSeriesSnapshot}
+                        metadataImportSucceeded={metadataImportSucceeded}
+                        submitDisabled={isApplyingCandidate}
                         submitLabel="Добавить фильм"
                         onSubmit={async (fields) => {
                             const result = await createMovie({ data: fields });
@@ -261,6 +274,7 @@ function NewMoviePage() {
                 formId={formId}
                 submitLabel="Добавить фильм"
                 isSubmitting={isSubmitting}
+                disabled={isApplyingCandidate}
                 onCancel={handleCancel}
             />
         </div>

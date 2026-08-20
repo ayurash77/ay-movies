@@ -83,6 +83,12 @@ function hasDetailedSeasons(candidate: LookupCandidate): candidate is MovieLooku
     return 'seasons' in candidate;
 }
 
+function hasSuccessfulMetadataImport(candidate: LookupCandidate) {
+    if (!hasDetailedSeasons(candidate)) return false;
+    if (candidate.kind === 'SERIES') return candidate.seasons.length > 0;
+    return candidate.kind === 'MOVIE' || candidate.kind === 'CARTOON';
+}
+
 export const Route = createFileRoute('/movies/$movieId_/edit')({
     beforeLoad: ({ context, params }) => {
         if (!context.user) {
@@ -112,6 +118,7 @@ function EditMoviePage() {
     const [ lookupCandidates, setLookupCandidates ] = useState<LookupCandidate[]>([]);
     const [ loadingCandidateKey, setLoadingCandidateKey ] = useState<string | null>(null);
     const [ submitImportedSeriesSnapshot, setSubmitImportedSeriesSnapshot ] = useState(false);
+    const [ metadataImportSucceeded, setMetadataImportSucceeded ] = useState(false);
     const requestGeneration = useRef(0);
     const applyingCandidateRef = useRef(false);
     const refreshingRef = useRef(false);
@@ -169,6 +176,7 @@ function EditMoviePage() {
         applyingCandidateRef.current = true;
         setLoadingCandidateKey(candidateKey);
         setSubmitImportedSeriesSnapshot(false);
+        setMetadataImportSucceeded(false);
 
         try {
             let selectedCandidate = candidate;
@@ -186,11 +194,12 @@ function EditMoviePage() {
 
             if (generation !== requestGeneration.current) return;
 
+            const metadataImportSucceeded = hasSuccessfulMetadataImport(selectedCandidate);
             setFormDefaults((current) => mergeLookupDefaults(current, selectedCandidate));
+            setMetadataImportSucceeded(metadataImportSucceeded);
             setSubmitImportedSeriesSnapshot(
-                hasDetailedSeasons(selectedCandidate)
-                && selectedCandidate.kind === 'SERIES'
-                && selectedCandidate.seasons.length > 0,
+                metadataImportSucceeded
+                && selectedCandidate.kind === 'SERIES',
             );
             setLookupCandidates([]);
             setFormVersion((current) => current + 1);
@@ -200,6 +209,7 @@ function EditMoviePage() {
             toast.warning('Подробные данные недоступны. Использованы основные данные.');
             setFormDefaults((current) => mergeLookupDefaults(current, candidate));
             setSubmitImportedSeriesSnapshot(false);
+            setMetadataImportSucceeded(false);
             setLookupCandidates([]);
             setFormVersion((current) => current + 1);
         } finally {
@@ -266,6 +276,8 @@ function EditMoviePage() {
                     submitLabel="Сохранить"
                     defaults={formDefaults}
                     submitImportedSeriesSnapshot={submitImportedSeriesSnapshot}
+                    metadataImportSucceeded={metadataImportSucceeded}
+                    submitDisabled={isApplyingCandidate}
                     onSubmit={async (fields) => {
                         const result = await updateMovie({ data: { ...fields, movieId: movie.id } });
                         if (result.ok) {
@@ -283,6 +295,7 @@ function EditMoviePage() {
                     formId={formId}
                     submitLabel="Сохранить"
                     isSubmitting={isSubmitting}
+                    disabled={isApplyingCandidate}
                     onCancel={() => navigate({ to: '/movies/$movieId', params: { movieId: movie.id } })}
                 />
             </div>

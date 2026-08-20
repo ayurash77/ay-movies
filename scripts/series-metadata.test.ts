@@ -5,10 +5,56 @@ import test from 'node:test';
 
 import {
     normalizeSeriesMetadata,
+    metadataImportWriteData,
     seriesMetadataSummary,
     seriesSummaryWriteData,
     seriesSnapshotWriteData,
 } from '../src/lib/series-metadata';
+
+test('keeps source IDs separate from successful metadata import timestamps', () => {
+    assert.deepEqual(metadataImportWriteData({
+        kind: 'MOVIE',
+        metadataProvider: 'kinopoisk-dev',
+        metadataExternalId: '123',
+        metadataImportSucceeded: false,
+        hasDetailedSeriesSnapshot: false,
+    }), {
+        metadataProvider: 'kinopoisk-dev',
+        metadataExternalId: '123',
+        shouldUpdateMetadataTimestamp: false,
+    });
+    assert.deepEqual(metadataImportWriteData({
+        kind: 'CARTOON',
+        metadataProvider: 'kinopoisk-unofficial',
+        metadataExternalId: '456',
+        metadataImportSucceeded: true,
+        hasDetailedSeriesSnapshot: false,
+    }), {
+        metadataProvider: 'kinopoisk-unofficial',
+        metadataExternalId: '456',
+        shouldUpdateMetadataTimestamp: true,
+    });
+    assert.deepEqual(metadataImportWriteData({
+        kind: 'MOVIE',
+        metadataProvider: 'kinopoisk-dev',
+        metadataImportSucceeded: true,
+        hasDetailedSeriesSnapshot: false,
+    }), {
+        metadataProvider: 'kinopoisk-dev',
+        shouldUpdateMetadataTimestamp: false,
+    });
+    assert.deepEqual(metadataImportWriteData({
+        kind: 'SERIES',
+        metadataProvider: 'kinopoisk-dev',
+        metadataExternalId: '789',
+        metadataImportSucceeded: false,
+        hasDetailedSeriesSnapshot: true,
+    }), {
+        metadataProvider: 'kinopoisk-dev',
+        metadataExternalId: '789',
+        shouldUpdateMetadataTimestamp: true,
+    });
+});
 
 test('normalizes and orders detailed seasons and episodes', () => {
     const seasons = normalizeSeriesMetadata([

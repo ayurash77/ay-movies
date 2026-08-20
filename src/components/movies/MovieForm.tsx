@@ -18,6 +18,8 @@ type MovieFormProps = {
     hideSubmitButton?: boolean;
     onSubmittingChange?: (isSubmitting: boolean) => void;
     submitImportedSeriesSnapshot?: boolean;
+    metadataImportSucceeded?: boolean;
+    submitDisabled?: boolean;
 };
 
 type FieldRowProps = {
@@ -121,6 +123,8 @@ export function MovieForm({
     hideSubmitButton,
     onSubmittingChange,
     submitImportedSeriesSnapshot = false,
+    metadataImportSucceeded = false,
+    submitDisabled = false,
 }: MovieFormProps) {
     const [ isSubmitting, setIsSubmitting ] = useState(false);
     const [ kind, setKind ] = useState<NonNullable<MovieFormFields['kind']>>(defaults?.kind ?? 'MOVIE');
@@ -150,6 +154,7 @@ export function MovieForm({
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (submitDisabled) return;
         const form = new FormData(event.currentTarget);
 
         setSubmitting(true);
@@ -186,6 +191,7 @@ export function MovieForm({
                 episodesPerSeason: defaults?.episodesPerSeason,
                 metadataProvider: defaults?.metadataProvider,
                 metadataExternalId: defaults?.metadataExternalId,
+                metadataImportSucceeded,
                 seriesSeasons: submitImportedSeriesSnapshot ? defaults?.seriesSeasons : undefined,
             });
         } catch {
@@ -349,7 +355,7 @@ export function MovieForm({
             ) : null}
 
             {hideSubmitButton ? null : (
-                <Button type="submit" disabled={isSubmitting} className="self-end">
+                <Button type="submit" disabled={isSubmitting || submitDisabled} className="self-end">
                     {isSubmitting ? 'Сохранение…' : submitLabel}
                 </Button>
             )}

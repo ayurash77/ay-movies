@@ -90,5 +90,6 @@ export type MovieFormFields = {
     metadataProvider?: LookupProvider | null;
     metadataExternalId?: string | null;
     metadataUpdatedAt?: string | null;
+    metadataImportSucceeded?: boolean;
     seriesSeasons?: SeriesSeasonMetadata[];
 };

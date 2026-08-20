@@ -4,6 +4,7 @@ type MovieFormFooterProps = {
     formId: string;
     submitLabel: string;
     isSubmitting: boolean;
+    disabled?: boolean;
     onCancel: () => void;
 };
 
@@ -11,6 +12,7 @@ export function MovieFormFooter({
     formId,
     submitLabel,
     isSubmitting,
+    disabled = false,
     onCancel,
 }: MovieFormFooterProps) {
     return (
@@ -19,7 +21,7 @@ export function MovieFormFooter({
                 <Button type="button" variant="outline" onClick={onCancel}>
                     Отмена
                 </Button>
-                <Button type="submit" form={formId} disabled={isSubmitting}>
+                <Button type="submit" form={formId} disabled={isSubmitting || disabled}>
                     {isSubmitting ? 'Сохранение…' : submitLabel}
                 </Button>
             </div>

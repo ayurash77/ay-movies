@@ -1,6 +1,7 @@
 import {
     seriesEpisodeMetadataSchema,
     seriesSeasonMetadataSchema,
+    type LookupProvider,
     type SeriesEpisodeMetadata,
     type SeriesSeasonMetadata,
 } from './movie-lookup-types';
@@ -147,4 +148,34 @@ export function seriesSnapshotWriteData(seasons: readonly SeriesSeasonMetadata[]
             })),
         },
     }));
+}
+
+type MetadataImportWriteInput = {
+    kind: 'MOVIE' | 'SERIES' | 'CARTOON';
+    metadataProvider?: LookupProvider | null;
+    metadataExternalId?: string | null;
+    metadataImportSucceeded?: boolean;
+    hasDetailedSeriesSnapshot: boolean;
+};
+
+export function metadataImportWriteData({
+    kind,
+    metadataProvider,
+    metadataExternalId,
+    metadataImportSucceeded,
+    hasDetailedSeriesSnapshot,
+}: MetadataImportWriteInput) {
+    const providerWasSubmitted = metadataProvider !== undefined;
+    const externalIdWasSubmitted = metadataExternalId !== undefined;
+    const hasValidExplicitSource = typeof metadataProvider === 'string'
+        && typeof metadataExternalId === 'string'
+        && metadataExternalId.length > 0;
+
+    return {
+        ...(providerWasSubmitted ? { metadataProvider: metadataProvider ?? null } : {}),
+        ...(externalIdWasSubmitted ? { metadataExternalId: metadataExternalId ?? null } : {}),
+        shouldUpdateMetadataTimestamp: kind === 'SERIES'
+            ? hasDetailedSeriesSnapshot
+            : metadataImportSucceeded === true && hasValidExplicitSource,
+    };
 }
