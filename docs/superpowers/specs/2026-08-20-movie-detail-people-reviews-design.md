@@ -38,7 +38,7 @@ provider database.
 ## Movie Detail Layout
 
 The existing top summary keeps the poster, year, country, genres, director,
-duration, watch status, and compact local rating. The `Описание` section no
+duration, and watch status. The `Описание` section no
 longer renders `DetailsTable`; it contains only the stored description text.
 
 The `О сериале` tab and regular movie page then render these sections in order:
