@@ -1,5 +1,9 @@
 import type { MovieKind } from '@/lib/movie-data';
 import {
+    personProfileSchema,
+    type PersonProfile,
+} from '@/lib/person-data';
+import {
     externalRatingSchema,
     movieCastMemberSchema,
     movieLookupDetailsSchema,
@@ -20,6 +24,29 @@ type KinopoiskPerson = {
     profession?: string | null;
     enProfession?: string | null;
     description?: string | null;
+};
+
+type KinopoiskValue = { value?: string | null };
+type KinopoiskPersonMovie = {
+    id?: number | string | null;
+    name?: string | null;
+    alternativeName?: string | null;
+    enProfession?: string | null;
+    description?: string | null;
+};
+export type KinopoiskPersonProfile = {
+    id?: number | string | null;
+    name?: string | null;
+    enName?: string | null;
+    photo?: string | null;
+    sex?: string | null;
+    growth?: number | null;
+    birthday?: string | null;
+    death?: string | null;
+    birthPlace?: KinopoiskValue[] | null;
+    profession?: KinopoiskValue[] | null;
+    facts?: KinopoiskValue[] | null;
+    movies?: KinopoiskPersonMovie[] | null;
 };
 
 export type KinopoiskMovie = {
@@ -82,6 +109,10 @@ function text(value: unknown) {
     return typeof value === 'string' ? value.trim() : '';
 }
 
+function boundedText(value: unknown) {
+    return text(value).slice(0, 300);
+}
+
 function normalize(value: string) {
     return value.toLowerCase().replaceAll('ё', 'е').trim();
 }
@@ -116,7 +147,7 @@ function isHttpUrl(value: string) {
     }
 }
 
-function externalId(value: KinopoiskPerson['id']) {
+function externalId(value: number | string | null | undefined) {
     if (typeof value === 'number') {
         return Number.isSafeInteger(value) && value > 0 ? String(value) : null;
     }
@@ -124,6 +155,43 @@ function externalId(value: KinopoiskPerson['id']) {
     const normalized = text(value);
     return /^[1-9]\d*$/.test(normalized) && Number.isSafeInteger(Number(normalized))
         ? normalized
+        : null;
+}
+
+function nullableDate(value: unknown) {
+    const candidate = text(value).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return null;
+    const date = new Date(`${candidate}T00:00:00.000Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === candidate
+        ? candidate
+        : null;
+}
+
+function stringValues(values: KinopoiskValue[] | null | undefined, max: number) {
+    const seen = new Set<string>();
+    return (values ?? []).flatMap((item) => {
+        const value = boundedText(item.value);
+        if (!value || seen.has(value)) return [];
+        seen.add(value);
+        return [ value ];
+    }).slice(0, max);
+}
+
+function actingCredits(person: KinopoiskPersonProfile) {
+    const seen = new Set<string>();
+    return (person.movies ?? []).flatMap((movie) => {
+        if (normalize(text(movie.enProfession)) !== 'actor') return [];
+        const id = externalId(movie.id);
+        if (!id || seen.has(id)) return [];
+        seen.add(id);
+        return [ { ...movie, externalId: id } ];
+    }).slice(0, 2_000);
+}
+
+function movieRating(movie: KinopoiskMovie | undefined) {
+    const value = movie?.rating?.kp ?? movie?.rating?.imdb;
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 10
+        ? value
         : null;
 }
 
@@ -231,6 +299,68 @@ export function mapKinopoiskRichMetadata(movie: KinopoiskMovie): {
     return { externalRatings, cast };
 }
 
+export function mapKinopoiskPerson(
+    personExternalId: string,
+    person: KinopoiskPersonProfile,
+    movieSummaries: KinopoiskMovie[] = [],
+): PersonProfile | null {
+    const summaries = new Map(
+        movieSummaries.flatMap((movie) => {
+            const id = externalId(movie.id);
+            return id ? [ [ id, movie ] as const ] : [];
+        }),
+    );
+    const localizedName = boundedText(person.name);
+    const englishName = boundedText(person.enName);
+    const name = localizedName || englishName;
+    if (!name) return null;
+
+    const photo = text(person.photo);
+    const parsed = personProfileSchema.safeParse({
+        provider: 'kinopoisk-dev',
+        externalId: personExternalId,
+        name,
+        originalName: localizedName && englishName ? englishName : null,
+        photoUrl: photo && isHttpUrl(photo) ? photo : null,
+        sex: boundedText(person.sex) || null,
+        growthCm: typeof person.growth === 'number' && Number.isInteger(person.growth)
+            ? person.growth
+            : null,
+        birthDate: nullableDate(person.birthday),
+        deathDate: nullableDate(person.death),
+        birthPlace: stringValues(person.birthPlace, 100),
+        professions: stringValues(person.profession, 100),
+        facts: stringValues(person.facts, 100),
+        filmography: actingCredits(person).flatMap((credit) => {
+            const summary = summaries.get(credit.externalId);
+            const title = boundedText(summary?.name)
+                || boundedText(credit.name)
+                || boundedText(summary?.alternativeName)
+                || boundedText(summary?.enName)
+                || boundedText(credit.alternativeName);
+            if (!title) return [];
+
+            const originalTitle = boundedText(summary?.alternativeName)
+                || boundedText(summary?.enName)
+                || boundedText(credit.alternativeName)
+                || null;
+            const poster = text(summary?.poster?.previewUrl) || text(summary?.poster?.url);
+            return [ {
+                externalId: credit.externalId,
+                title,
+                originalTitle,
+                year: typeof summary?.year === 'number' ? summary.year : null,
+                posterUrl: poster && isHttpUrl(poster) ? poster : null,
+                type: boundedText(summary?.type) || null,
+                rating: movieRating(summary),
+                role: boundedText(credit.description) || null,
+            } ];
+        }),
+    });
+
+    return parsed.success ? parsed.data : null;
+}
+
 export function mapKinopoiskSeasons(input: KinopoiskSeason[]): SeriesSeasonMetadata[] {
     return normalizeSeriesMetadata(input.map((season) => ({
         number: season.number ?? 0,
@@ -262,14 +392,18 @@ function getKinopoiskConfig() {
     };
 }
 
-async function kinopoiskJson<T>(path: string, params?: URLSearchParams): Promise<T | null> {
+async function kinopoiskJson<T>(
+    path: string,
+    params?: URLSearchParams,
+    signal?: AbortSignal,
+): Promise<T | null> {
     const config = getKinopoiskConfig();
     if (!config) return null;
 
     try {
         const query = params?.size ? `?${params}` : '';
         const res = await fetch(`${config.baseUrl}${path}${query}`, {
-            signal: AbortSignal.timeout(15000),
+            signal: signal ?? AbortSignal.timeout(15000),
             headers: {
                 accept: 'application/json',
                 'X-API-KEY': config.token,
@@ -291,6 +425,41 @@ async function loadKinopoiskSeasons(movieId: string) {
     });
     const json = await kinopoiskJson<KinopoiskSeasonResponse>('/v1.4/season', params);
     return json?.docs ?? [];
+}
+
+export async function loadKinopoiskPerson(personExternalId: string): Promise<PersonProfile | null> {
+    const personId = personExternalId.trim();
+    if (!externalId(personId)) return null;
+
+    const person = await kinopoiskJson<KinopoiskPersonProfile>(
+        `/v1.4/person/${encodeURIComponent(personId)}`,
+    );
+    if (!person) return null;
+
+    const ids = actingCredits(person).map((credit) => credit.externalId);
+    const summaries: KinopoiskMovie[] = [];
+    const chunks = Array.from(
+        { length: Math.ceil(ids.length / 100) },
+        (_, index) => ids.slice(index * 100, (index + 1) * 100),
+    );
+    const enrichmentSignal = AbortSignal.timeout(15000);
+    let nextChunk = 0;
+    await Promise.all(Array.from({ length: Math.min(4, chunks.length) }, async () => {
+        while (nextChunk < chunks.length) {
+            const chunk = chunks[nextChunk++];
+            const params = new URLSearchParams({ limit: String(chunk.length) });
+            for (const id of chunk) params.append('id', id);
+
+            const response = await kinopoiskJson<KinopoiskSearchResponse>(
+                '/v1.4/movie',
+                params,
+                enrichmentSignal,
+            );
+            summaries.push(...(response?.docs ?? []));
+        }
+    }));
+
+    return mapKinopoiskPerson(personId, person, summaries);
 }
 
 export async function lookupKinopoiskCandidates(title: string, kind?: MovieKind): Promise<MovieLookupCandidate[]> {
