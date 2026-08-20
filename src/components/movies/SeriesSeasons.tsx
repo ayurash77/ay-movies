@@ -24,15 +24,16 @@ function formatAirDate(value: string | null | undefined) {
 }
 
 function episodeContentFingerprint(episode: SeriesEpisodeMetadata) {
-    return [
+    return JSON.stringify([
         episode.number,
         episode.name ?? null,
         episode.originalName ?? null,
-        episode.description ?? null,
-        episode.originalDescription ?? null,
         episode.airDate ?? null,
-        episode.stillUrl ?? null,
-    ];
+    ]);
+}
+
+function codeUnitCompare(left: string, right: string) {
+    return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function seasonContentFingerprint(season: SeriesSeasonMetadata) {
@@ -40,15 +41,26 @@ function seasonContentFingerprint(season: SeriesSeasonMetadata) {
         season.number,
         season.name ?? null,
         season.originalName ?? null,
-        season.description ?? null,
-        season.originalDescription ?? null,
         season.airDate ?? null,
-        season.durationMin ?? null,
-        season.posterUrl ?? null,
-        season.episodes.map(episodeContentFingerprint).sort((left, right) => (
-            JSON.stringify(left).localeCompare(JSON.stringify(right))
-        )),
+        season.episodes.map(episodeContentFingerprint).sort(codeUnitCompare),
     ]);
+}
+
+function fnv1a(value: string, seed: number) {
+    let hash = seed >>> 0;
+
+    for (let index = 0; index < value.length; index += 1) {
+        hash = Math.imul(hash ^ value.charCodeAt(index), 0x01000193) >>> 0;
+    }
+
+    return hash;
+}
+
+function boundedSeasonHash(fingerprint: string) {
+    const primary = fnv1a(fingerprint, 0x811c9dc5);
+    const secondary = fnv1a(fingerprint, 0x811c9dc5 ^ 0x9e3779b9);
+
+    return `${primary.toString(16).padStart(8, '0')}${secondary.toString(16).padStart(8, '0')}`;
 }
 
 function withContentIds(seasons: readonly SeriesSeasonMetadata[]): SeasonEpisodes[] {
@@ -61,7 +73,7 @@ function withContentIds(seasons: readonly SeriesSeasonMetadata[]): SeasonEpisode
 
         return {
             ...season,
-            id: `season-${fingerprint}-${occurrence}`,
+            id: `season-${boundedSeasonHash(fingerprint)}-${occurrence}`,
         };
     });
 }
@@ -99,7 +111,7 @@ function EpisodeRow({ episode, seriesTitle }: { episode: SeriesEpisodeMetadata; 
     const { number } = episode;
     const name = episode.name || `Серия ${number}`;
     const originalName = episode.originalName?.trim();
-    const showOriginalName = originalName && originalName.localeCompare(name, 'ru', { sensitivity: 'accent' }) !== 0;
+    const showOriginalName = Boolean(originalName && originalName !== name);
     const airDate = formatAirDate(episode.airDate);
 
     return (

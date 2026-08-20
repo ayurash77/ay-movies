@@ -59,6 +59,11 @@ test('series detail page has compact about and seasons tabs', () => {
     assert.match(seasons, /activeSeasonId/);
     assert.match(seasons, /season\.id === activeSeasonId/);
     assert.match(seasons, /function seasonContentFingerprint/);
+    assert.match(seasons, /function boundedSeasonHash/);
+    assert.match(seasons, /padStart\(8, '0'\)/);
+    assert.match(seasons, /id: `season-\$\{boundedSeasonHash\(fingerprint\)\}-\$\{occurrence\}`/);
+    assert.doesNotMatch(seasons, /localeCompare/);
+    assert.doesNotMatch(seasons, /id: `season-\$\{fingerprint\}/);
     assert.doesNotMatch(seasons, /id: `season-\$\{(?:season\.)?number\}-\$\{seasonIndex\}`/);
 });
 
