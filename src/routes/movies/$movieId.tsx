@@ -1,21 +1,21 @@
 import { useMemo } from 'react';
 import { createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router';
-import { ArrowLeft, Clock, Clapperboard, ExternalLink, Globe, Pencil, PlayCircle, Tv, User, Users } from 'lucide-react';
+import { ArrowLeft, Clock, Clapperboard, ExternalLink, Globe, Pencil, PlayCircle, Tv, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { PageTitle } from '@/components/AppTitle';
 import { CommentsSection } from '@/components/movies/CommentsSection';
+import { MovieCast } from '@/components/movies/MovieCast';
 import { MoviePoster } from '@/components/movies/MoviePoster';
-import { RatingStars } from '@/components/movies/RatingStars';
+import { MovieRatings } from '@/components/movies/MovieRatings';
 import { SeriesSeasons } from '@/components/movies/SeriesSeasons';
 import { WatchButtons } from '@/components/movies/WatchButtons';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MovieDetails } from '@/lib/movie-data';
 import { normalizeStoredGenres } from '@/lib/movie-merge';
-import { formatRating } from '@/lib/utils';
-import { getComments } from '@/server/comments';
+import { getComments, type MovieComment } from '@/server/comments';
 import { getMovie, rateMovie } from '@/server/movies';
 
 function trailerEmbedUrl(url: string) {
@@ -124,45 +124,46 @@ function WatchLinksSection({ movie }: { movie: Pick<MovieDetails, 'watchLinks'> 
     );
 }
 
-function DetailsTable({ movie, displayGenres }: { movie: MovieDetails; displayGenres: string[] }) {
-    const rows = [
-        [ 'Год', movie.kind === 'SERIES' && movie.seasonsCount ? `${movie.year} · ${movie.seasonsCount} сез.` : String(movie.year) ],
-        [ 'Страна', movie.country ],
-        displayGenres.length ? [ 'Жанр', displayGenres.join(', ') ] : null,
-        movie.director ? [ 'Режиссёр', movie.director ] : null,
-        movie.durationMin ? [ movie.kind === 'SERIES' ? 'Время серии' : 'Длительность', `${movie.durationMin} мин` ] : null,
-        movie.kind === 'SERIES' && seriesMeta(movie) ? [ 'Сезоны и серии', seriesMeta(movie) ] : null,
-    ].filter((row): row is [ string, string ] => Boolean(row));
-
-    return (
-        <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[10rem_1fr]">
-            {rows.map(([ label, value ]) => (
-                <div key={label} className="contents">
-                    <dt className="text-muted-foreground">{label}</dt>
-                    <dd className="text-foreground/90">{value}</dd>
-                </div>
-            ))}
-        </dl>
-    );
-}
-
-function AboutSection({ movie, displayGenres }: { movie: MovieDetails; displayGenres: string[] }) {
+function AboutSection({ movie, comments, isAuthed, onRate }: {
+    movie: MovieDetails;
+    comments: MovieComment[];
+    isAuthed: boolean;
+    onRate: (value: number) => void;
+}) {
     return (
         <div className="flex flex-col gap-6">
             <TrailerSection movie={movie}/>
             <section className="flex flex-col gap-4">
                 <h2 className="text-lg font-semibold">Описание</h2>
-                <DetailsTable movie={movie} displayGenres={displayGenres}/>
                 <p className="whitespace-pre-line leading-relaxed text-foreground/90">
                     {movie.description}
                 </p>
             </section>
+            <MovieRatings
+                externalRatings={movie.externalRatings}
+                avgRating={movie.avgRating}
+                ratingCount={movie.ratingCount}
+                myRating={movie.myRating}
+                isAuthed={isAuthed}
+                onRate={onRate}
+            />
+            <MovieCast cast={movie.cast} legacyStarring={movie.starring}/>
             <WatchLinksSection movie={movie}/>
+            <CommentsSection
+                movieId={movie.id}
+                comments={comments}
+                isAuthed={isAuthed}
+            />
         </div>
     );
 }
 
-function SeriesTabs({ movie, displayGenres }: { movie: MovieDetails; displayGenres: string[] }) {
+function SeriesTabs({ movie, comments, isAuthed, onRate }: {
+    movie: MovieDetails;
+    comments: MovieComment[];
+    isAuthed: boolean;
+    onRate: (value: number) => void;
+}) {
     return (
         <Tabs defaultValue="about" className="gap-5">
             <TabsList className="h-auto w-full justify-start gap-6 overflow-x-auto rounded-none border-b border-border/60 bg-transparent p-0">
@@ -180,7 +181,7 @@ function SeriesTabs({ movie, displayGenres }: { movie: MovieDetails; displayGenr
                 </TabsTrigger>
             </TabsList>
             <TabsContent value="about">
-                <AboutSection movie={movie} displayGenres={displayGenres}/>
+                <AboutSection movie={movie} comments={comments} isAuthed={isAuthed} onRate={onRate}/>
             </TabsContent>
             <TabsContent value="seasons">
                 <SeriesSeasons movie={movie}/>
@@ -262,15 +263,6 @@ function MoviePage() {
                         {movie.year} · {movie.country}
                     </p>
 
-                    <div className="flex items-center gap-3">
-                        <RatingStars value={movie.avgRating}/>
-                        <span className="text-sm text-muted-foreground">
-                            {movie.ratingCount > 0
-                                ? `${formatRating(movie.avgRating)} · ${movie.ratingCount} оцен.`
-                                : 'Оценок пока нет'}
-                        </span>
-                    </div>
-
                     {user ? (
                         <WatchButtons movieId={movie.id} current={movie.myWatchStatus}/>
                     ) : null}
@@ -313,57 +305,27 @@ function MoviePage() {
                         </div>
                     ) : null}
 
-                    {movie.starring.length > 0 ? (
-                        <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
-                            <Users className="mt-0.5 size-4 shrink-0"/>
-                            <span>
-                                <span className="font-medium text-foreground">В главных ролях: </span>
-                                {movie.starring.join(', ')}
-                            </span>
-                        </p>
-                    ) : null}
-
-                    {movie.kind === 'SERIES' ? (
-                        <SeriesTabs movie={movie} displayGenres={displayGenres}/>
-                    ) : (
-                        <AboutSection movie={movie} displayGenres={displayGenres}/>
-                    )}
-
-                    <div className="mt-2 rounded-lg border border-border bg-card p-4">
-                        {user ? (
-                            <div className="flex flex-col gap-2">
-                                <span className="text-sm font-medium">
-                                    {movie.myRating
-                                        ? `Ваша оценка: ${movie.myRating} из 5`
-                                        : 'Оцените фильм'}
-                                </span>
-                                <RatingStars
-                                    value={movie.myRating ?? 0}
-                                    onRate={handleRate}
-                                    size="lg"
-                                />
-                            </div>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                <Link to="/sign-in" className="text-primary hover:underline">
-                                    Войдите
-                                </Link>
-                                , чтобы оценить фильм
-                            </p>
-                        )}
-                    </div>
-
                     {movie.addedBy ? (
                         <p className="text-xs text-muted-foreground">
                             Добавил(а): {movie.addedBy}
                         </p>
                     ) : null}
 
-                    <CommentsSection
-                        movieId={movie.id}
-                        comments={comments}
-                        isAuthed={Boolean(user)}
-                    />
+                    {movie.kind === 'SERIES' ? (
+                        <SeriesTabs
+                            movie={movie}
+                            comments={comments}
+                            isAuthed={Boolean(user)}
+                            onRate={handleRate}
+                        />
+                    ) : (
+                        <AboutSection
+                            movie={movie}
+                            comments={comments}
+                            isAuthed={Boolean(user)}
+                            onRate={handleRate}
+                        />
+                    )}
                 </div>
             </div>
         </div>
