@@ -1,5 +1,10 @@
 import type { GenreOption } from './genre-groups';
-import type { LookupProvider, SeriesSeasonMetadata } from './movie-lookup-types';
+import type {
+    ExternalRatings,
+    LookupProvider,
+    MovieCastMember,
+    SeriesSeasonMetadata,
+} from './movie-lookup-types';
 
 export const movieSortOptions = [ 'new', 'rating', 'year', 'title' ] as const;
 export type MovieSort = (typeof movieSortOptions)[number];
@@ -43,6 +48,8 @@ export type HomeMovies = {
     latest: MovieCardData[];
 };
 
+export type MovieCastPerson = MovieCastMember & { personId: string };
+
 export type MovieDetails = {
     id: string;
     kind: MovieKind;
@@ -56,6 +63,8 @@ export type MovieDetails = {
     director: string | null;
     genres: string[];
     starring: string[];
+    externalRatings: ExternalRatings;
+    cast: MovieCastPerson[];
     durationMin: number | null;
     seasonsCount: number | null;
     episodesPerSeason: number[];
@@ -92,4 +101,6 @@ export type MovieFormFields = {
     metadataUpdatedAt?: string | null;
     metadataImportSucceeded?: boolean;
     seriesSeasons?: SeriesSeasonMetadata[];
+    externalRatings?: ExternalRatings;
+    cast?: MovieCastMember[];
 };

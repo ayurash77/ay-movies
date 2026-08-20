@@ -15,7 +15,9 @@ import {
 import { GENRE_OPTIONS, normalizeGenre } from '@/lib/genre-groups';
 import { buildMovieDedupeKey } from '@/lib/movie-dedupe';
 import {
+    externalRatingsSchema,
     lookupProviderSchema,
+    movieCastMemberSchema,
     seriesMetadataSnapshotSchema,
 } from '@/lib/movie-lookup-types';
 import {
@@ -25,6 +27,7 @@ import {
     seriesSnapshotWriteData,
 } from '@/lib/series-metadata';
 import { toServedUploadUrl } from '@/lib/upload-url';
+import { writeMovieRichMetadata } from './movie-rich-metadata';
 
 const MOVIE_PAGE_SIZE = 48;
 
@@ -283,6 +286,21 @@ export const getMovie = createServerFn({ method: 'GET' })
                     orderBy: { number: 'asc' },
                     include: { episodes: { orderBy: { number: 'asc' } } },
                 },
+                personCredits: {
+                    orderBy: { position: 'asc' },
+                    include: {
+                        person: {
+                            select: {
+                                id: true,
+                                provider: true,
+                                externalId: true,
+                                name: true,
+                                originalName: true,
+                                photoUrl: true,
+                            },
+                        },
+                    },
+                },
             },
         });
         if (!movie) return null;
@@ -318,6 +336,32 @@ export const getMovie = createServerFn({ method: 'GET' })
             director: movie.director,
             genres: movie.genres,
             starring: movie.starring,
+            externalRatings: {
+                kinopoisk: movie.kinopoiskRating === null
+                    ? null
+                    : { value: movie.kinopoiskRating, votes: movie.kinopoiskVotes },
+                imdb: movie.imdbRating === null
+                    ? null
+                    : { value: movie.imdbRating, votes: movie.imdbVotes },
+                russianCritics: movie.russianCriticsPercent === null
+                    ? null
+                    : { value: movie.russianCriticsPercent, votes: movie.russianCriticsVotes },
+            },
+            cast: movie.personCredits.flatMap((credit) => {
+                const member = movieCastMemberSchema.safeParse({
+                    provider: credit.person.provider,
+                    externalId: credit.person.externalId,
+                    name: credit.person.name,
+                    originalName: credit.person.originalName,
+                    photoUrl: credit.person.photoUrl,
+                    profession: credit.profession,
+                    role: credit.role,
+                    order: credit.position,
+                });
+                return member.success
+                    ? [ { ...member.data, personId: credit.person.id } ]
+                    : [];
+            }),
             durationMin: movie.durationMin,
             seasonsCount: movie.seasonsCount,
             episodesPerSeason: movie.episodesPerSeason,
@@ -401,6 +445,8 @@ const movieFieldsSchema = z.object({
     metadataExternalId: z.string().trim().max(100).nullish(),
     metadataImportSucceeded: z.boolean().optional(),
     seriesSeasons: seriesMetadataSnapshotSchema.optional(),
+    externalRatings: externalRatingsSchema.optional(),
+    cast: z.array(movieCastMemberSchema).max(100).optional(),
 });
 
 function splitList(value: string | undefined) {
@@ -531,16 +577,24 @@ export const createMovie = createServerFn({ method: 'POST' })
 
         let movie;
         try {
-            movie = await db.$transaction(async (tx) => tx.movie.create({
-                data: {
-                    ...movieData,
-                    ...explicitMetadataData(data, movieData.kind, seriesSeasons.length > 0),
-                    createdById: user.id,
-                    seriesSeasons: seriesSeasons.length > 0
-                        ? { create: seriesSnapshotWriteData(seriesSeasons) }
-                        : undefined,
-                },
-            }));
+            movie = await db.$transaction(async (tx) => {
+                const created = await tx.movie.create({
+                    data: {
+                        ...movieData,
+                        ...explicitMetadataData(data, movieData.kind, seriesSeasons.length > 0),
+                        createdById: user.id,
+                        seriesSeasons: seriesSeasons.length > 0
+                            ? { create: seriesSnapshotWriteData(seriesSeasons) }
+                            : undefined,
+                    },
+                });
+                await writeMovieRichMetadata(tx, created.id, {
+                    importSucceeded: data.metadataImportSucceeded === true,
+                    externalRatings: data.externalRatings,
+                    cast: data.cast,
+                });
+                return created;
+            });
         } catch (error) {
             if (!isUniqueConstraintError(error)) throw error;
             const existing = await db.movie.findUnique({
@@ -607,10 +661,7 @@ export const updateMovie = createServerFn({ method: 'POST' })
                         where: { id: movieId },
                         data: { ...movieData, ...metadataData },
                     });
-                    return;
-                }
-
-                if (seriesSeasons.length > 0) {
+                } else if (seriesSeasons.length > 0) {
                     await tx.seriesSeason.deleteMany({ where: { movieId } });
                     await tx.movie.update({
                         where: { id: movieId },
@@ -620,13 +671,18 @@ export const updateMovie = createServerFn({ method: 'POST' })
                             seriesSeasons: { create: seriesSnapshotWriteData(seriesSeasons) },
                         },
                     });
-                    return;
+                } else {
+                    // An absent or empty detailed snapshot preserves existing episode rows and summary fields.
+                    await tx.movie.update({
+                        where: { id: movieId },
+                        data: { ...movieData, ...metadataData },
+                    });
                 }
 
-                // An absent or empty detailed snapshot preserves existing episode rows and summary fields.
-                await tx.movie.update({
-                    where: { id: movieId },
-                    data: { ...movieData, ...metadataData },
+                await writeMovieRichMetadata(tx, movieId, {
+                    importSucceeded: fields.metadataImportSucceeded === true,
+                    externalRatings: fields.externalRatings,
+                    cast: fields.cast,
                 });
             });
         } catch (error) {

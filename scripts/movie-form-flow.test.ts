@@ -83,6 +83,44 @@ test('movie form keeps imported series data without manual season inputs', () =>
     assert.match(form, /if \(submitDisabled\) return/);
 });
 
+test('successful detailed lookup carries rich metadata snapshots through the form', () => {
+    const dataTypes = read('src/lib/movie-data.ts');
+    const form = read('src/components/movies/MovieForm.tsx');
+    const newRoute = read('src/routes/movies/new.tsx');
+    const editRoute = read('src/routes/movies/$movieId_.edit.tsx');
+    const server = read('src/server/movies.ts');
+
+    assert.match(dataTypes, /externalRatings\?: ExternalRatings/);
+    assert.match(dataTypes, /cast\?: MovieCastMember\[\]/);
+    assert.match(newRoute, /externalRatings: 'externalRatings' in candidate[\s\S]*candidate\.externalRatings/);
+    assert.match(newRoute, /cast: 'cast' in candidate \? candidate\.cast/);
+    assert.match(editRoute, /externalRatings: movie\.externalRatings/);
+    assert.match(editRoute, /cast: movie\.cast/);
+    assert.match(editRoute, /externalRatings: hasDetailedSeasons\(lookup\)[\s\S]*lookup\.externalRatings/);
+    assert.match(editRoute, /cast: hasDetailedSeasons\(lookup\)[\s\S]*lookup\.cast/);
+    assert.match(
+        form,
+        /externalRatings: metadataImportSucceeded \? defaults\?\.externalRatings : undefined/,
+    );
+    assert.match(form, /cast: metadataImportSucceeded \? defaults\?\.cast : undefined/);
+    assert.match(server, /externalRatings: externalRatingsSchema\.optional\(\)/);
+    assert.match(server, /cast: z\.array\(movieCastMemberSchema\)\.max\(100\)\.optional\(\)/);
+});
+
+test('movie details return stored ratings and cast with local person links', () => {
+    const dataTypes = read('src/lib/movie-data.ts');
+    const server = read('src/server/movies.ts');
+
+    assert.match(dataTypes, /export type MovieCastPerson = MovieCastMember & \{ personId: string \}/);
+    assert.match(dataTypes, /externalRatings: ExternalRatings/);
+    assert.match(dataTypes, /cast: MovieCastPerson\[\]/);
+    assert.match(server, /personCredits: \{/);
+    assert.match(server, /orderBy: \{ position: 'asc' \}/);
+    assert.match(server, /personId: credit\.person\.id/);
+    assert.match(server, /externalRatings:/);
+    assert.doesNotMatch(server, /getMovie[\s\S]*loadMovieLookupDetails/);
+});
+
 test('movie form supports external sticky footer actions', () => {
     const form = read('src/components/movies/MovieForm.tsx');
     const footer = read('src/components/movies/MovieFormFooter.tsx');

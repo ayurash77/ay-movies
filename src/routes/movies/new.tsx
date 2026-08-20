@@ -60,6 +60,10 @@ function candidateToFormDefaults(
         metadataProvider: candidate.provider,
         metadataExternalId: candidate.externalId ?? null,
         seriesSeasons: 'seasons' in candidate ? candidate.seasons : undefined,
+        externalRatings: 'externalRatings' in candidate
+            ? candidate.externalRatings ?? undefined
+            : undefined,
+        cast: 'cast' in candidate ? candidate.cast : undefined,
     };
 }
 

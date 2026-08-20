@@ -38,6 +38,8 @@ function movieToFormDefaults(movie: Awaited<ReturnType<typeof getMovie>>): Parti
         metadataProvider: movie.metadataProvider,
         metadataExternalId: movie.metadataExternalId,
         seriesSeasons: movie.seriesSeasons,
+        externalRatings: movie.externalRatings,
+        cast: movie.cast,
     };
 }
 
@@ -68,6 +70,10 @@ function mergeLookupDefaults(
         metadataProvider: lookup.provider,
         metadataExternalId: lookup.externalId ?? null,
         seriesSeasons: hasSnapshot ? lookup.seasons : current.seriesSeasons,
+        externalRatings: hasDetailedSeasons(lookup)
+            ? lookup.externalRatings ?? undefined
+            : current.externalRatings,
+        cast: hasDetailedSeasons(lookup) ? lookup.cast : current.cast,
     };
 }
 

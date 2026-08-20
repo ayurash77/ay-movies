@@ -193,6 +193,8 @@ export function MovieForm({
                 metadataExternalId: defaults?.metadataExternalId,
                 metadataImportSucceeded,
                 seriesSeasons: submitImportedSeriesSnapshot ? defaults?.seriesSeasons : undefined,
+                externalRatings: metadataImportSucceeded ? defaults?.externalRatings : undefined,
+                cast: metadataImportSucceeded ? defaults?.cast : undefined,
             });
         } catch {
             toast.error('Проверьте правильность заполнения полей');
