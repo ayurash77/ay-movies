@@ -98,6 +98,7 @@ const searchMoviesSchema = z.object({
     sort: z.enum(movieSortOptions).optional(),
     dir: z.enum(movieSortDirOptions).optional(),
     kind: z.enum(movieKindOptions).optional(),
+    genre: z.string().trim().max(80).optional(),
     cursor: z.coerce.number().int().min(0).optional(),
 });
 
@@ -122,8 +123,10 @@ function genreSearchTerms(q: string) {
 function searchWhere(data: SearchMoviesData) {
     const q = data.q;
     const genreTerms = q ? genreSearchTerms(q) : [];
+    const selectedGenreTerms = data.genre ? genreSearchTerms(data.genre) : [];
     return {
         ...(data.kind ? { kind: data.kind } : {}),
+        ...(selectedGenreTerms.length ? { genres: { hasSome: selectedGenreTerms } } : {}),
         ...(q
             ? {
                 OR: [
@@ -145,6 +148,16 @@ function searchSqlWhere(data: SearchMoviesData) {
     if (data.kind) {
         params.push(data.kind);
         conditions.push(`m."kind"::text = $${params.length}`);
+    }
+
+    if (data.genre) {
+        const genreChecks = genreSearchTerms(data.genre).map((term) => {
+            params.push(term);
+            return `m."genres" @> ARRAY[$${params.length}]::text[]`;
+        });
+        if (genreChecks.length) {
+            conditions.push(`(${genreChecks.join(' OR ')})`);
+        }
     }
 
     if (q) {

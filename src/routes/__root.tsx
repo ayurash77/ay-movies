@@ -146,7 +146,7 @@ function RootLayout() {
             <div className={cn('flex min-w-0 flex-1 flex-col bg-surface', isChatRoute && 'h-svh min-h-0 overflow-hidden')}>
                 <header
                     className={cn(
-                        'sticky top-0 z-30 flex shrink-0 flex-col border-b border-border/60 bg-transparent shadow-[0_12px_30px_rgb(0_0_0/0.24)]',
+                        'sticky top-0 z-30 flex shrink-0 flex-col bg-transparent shadow-[0_12px_30px_rgb(0_0_0/0.24)]',
                         isChatRoute ? 'min-h-14' : appToolbar ? 'min-h-24' : 'min-h-14',
                     )}
                 >

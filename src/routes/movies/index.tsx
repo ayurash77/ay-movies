@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { z } from 'zod';
 
@@ -32,7 +32,13 @@ export const Route = createFileRoute('/movies/')({
         kind: z.enum(movieKindOptions).optional(),
         genre: z.string().optional(),
     }),
-    loaderDeps: ({ search }) => ({ q: search.q, sort: search.sort, dir: search.dir, kind: search.kind }),
+    loaderDeps: ({ search }) => ({
+        q: search.q,
+        sort: search.sort,
+        dir: search.dir,
+        kind: search.kind,
+        genre: search.genre,
+    }),
     loader: async ({ deps }) => searchMovies({ data: deps }),
     component: MoviesPage,
 });
@@ -43,13 +49,9 @@ function MoviesPage() {
     const { user } = Route.useRouteContext();
     const navigate = useNavigate({ from: Route.fullPath });
     const title = kind ? KIND_TITLES[kind] : 'Все фильмы';
-    const [ genreCount, setGenreCount ] = useState<number | null>(null);
     const preferenceScope = `movies:${kind ?? 'all'}`;
     const selectedGenre = genre?.trim() || null;
-
-    useEffect(() => {
-        setGenreCount(null);
-    }, [ selectedGenre ]);
+    const genreCount = selectedGenre ? page.total : null;
 
     useEffect(() => {
         const preferences = readCatalogPreferences(user?.id ?? null, preferenceScope);
@@ -88,7 +90,7 @@ function MoviesPage() {
             </button>
             <span className="shrink-0 text-muted-foreground">/</span>
             <span className="min-w-0 truncate text-primary">
-                {selectedGenre} ({genreCount ?? '...'})
+                {selectedGenre} ({genreCount ?? 0})
             </span>
         </span>
     ) : undefined, [ genreCount, handleGenreChange, selectedGenre, title ]);
@@ -103,7 +105,7 @@ function MoviesPage() {
             onDirChange={handleDirChange}
         />
     ), [ dir, handleDirChange, handleQueryChange, handleSortChange, q, sort ]);
-    const galleryQuery = useMemo(() => ({ q, sort, dir, kind }), [ dir, kind, q, sort ]);
+    const galleryQuery = useMemo(() => ({ q, sort, dir, kind, genre }), [ dir, genre, kind, q, sort ]);
 
     return (
         <div className="flex flex-col gap-6">
@@ -118,7 +120,6 @@ function MoviesPage() {
                 userId={user?.id ?? null}
                 selectedGenre={selectedGenre}
                 onSelectedGenreChange={handleGenreChange}
-                onGenreCountChange={setGenreCount}
             />
         </div>
     );

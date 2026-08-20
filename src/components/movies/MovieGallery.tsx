@@ -145,7 +145,7 @@ export function MovieGallery({
     );
 
     const selectedGenreMovies = currentSelectedGenre
-        ? genreGroups.find(([ genre ]) => genre === currentSelectedGenre)?.[1] ?? null
+        ? genreGroups.find(([ genre ]) => genre === currentSelectedGenre)?.[1] ?? visibleMovies
         : null;
 
     useEffect(() => {
@@ -173,8 +173,7 @@ export function MovieGallery({
             return;
         }
         setGroupByGenre(true);
-        onNeedCompleteSet?.();
-    }, [ currentSelectedGenre, onGenreCountChange, onNeedCompleteSet ]);
+    }, [ currentSelectedGenre, onGenreCountChange ]);
 
     useEffect(() => {
         if (!currentSelectedGenre) return;
@@ -204,8 +203,7 @@ export function MovieGallery({
     const handleSelectGenre = useCallback((genre: string) => {
         setGroupByGenre(true);
         setSelectedGenreValue(genre);
-        onNeedCompleteSet?.();
-    }, [ onNeedCompleteSet, setSelectedGenreValue ]);
+    }, [ setSelectedGenreValue ]);
 
     const renderCountryGroups = (items: MovieCardData[]) => {
         const groups = [ ...groupBy(items, primaryCountry).entries() ]

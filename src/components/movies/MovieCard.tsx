@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useLocation } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { IoFilm } from 'react-icons/io5';
@@ -33,11 +33,14 @@ function seriesMeta(movie: MovieCardData) {
 
 export function MovieCard({ movie, className }: { movie: MovieCardData; className?: string }) {
     const meta = seriesMeta(movie);
+    const { pathname, searchStr } = useLocation();
+    const currentPath = `${pathname}${searchStr}`;
 
     return (
         <Link
             to="/movies/$movieId"
             params={{ movieId: movie.id }}
+            search={{ from: currentPath }}
             className={cn(
                 'group flex w-40 shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-[0_14px_34px_rgb(0_0_0/0.24)] transition-all hover:-translate-y-1 hover:border-primary/60 hover:shadow-[0_20px_46px_rgb(0_0_0/0.34)]',
                 className,

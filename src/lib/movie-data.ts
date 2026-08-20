@@ -29,6 +29,7 @@ export type MovieSearchQuery = {
     sort?: MovieSort;
     dir?: MovieSortDir;
     kind?: MovieKind;
+    genre?: string;
 };
 
 export type MovieSearchPage = {

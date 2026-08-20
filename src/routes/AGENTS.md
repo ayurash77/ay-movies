@@ -16,6 +16,13 @@
 - Для `/chat` root фиксируется по высоте viewport: `h-svh overflow-hidden`; не возвращай общий body/page scroll для активного диалога.
 - Header title приходит из `AppTitleProvider`.
 - На основных страницах каталога header показывает залитую icon-only кнопку добавления `h-8`: `/` открывает dropdown выбора типа, `/movies?kind=...` ведет сразу к добавлению этого типа.
+- Header использует backdrop/тень без нижнего `border-b`.
+
+## Movie Routes
+
+- Каталог фильтрует выбранный жанр через URL search param `genre`; счетчик в header берется из `searchMovies().total`, не из клиентского callback.
+- Detail `/movies/$movieId` принимает search param `from`; back button ведет в этот безопасный внутренний URL или `/`.
+- Для сериалов detail показывает вкладки `О сериале` и `Сезоны и серии`; реальные названия эпизодов пока не хранятся, поэтому список строится из `episodesPerSeason`.
 
 ## Dashboard/Friends
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { z } from 'zod';
 
@@ -16,7 +16,7 @@ export const Route = createFileRoute('/')({
         dir: z.enum(movieSortDirOptions).optional(),
         genre: z.string().optional(),
     }),
-    loaderDeps: ({ search }) => ({ q: search.q, sort: search.sort, dir: search.dir }),
+    loaderDeps: ({ search }) => ({ q: search.q, sort: search.sort, dir: search.dir, genre: search.genre }),
     loader: async ({ deps }) => searchMovies({ data: deps }),
     component: HomePage,
 });
@@ -26,13 +26,9 @@ function HomePage() {
     const { q, sort, dir, genre } = Route.useSearch();
     const { user } = Route.useRouteContext();
     const navigate = useNavigate({ from: Route.fullPath });
-    const [ genreCount, setGenreCount ] = useState<number | null>(null);
     const preferenceScope = 'home';
     const selectedGenre = genre?.trim() || null;
-
-    useEffect(() => {
-        setGenreCount(null);
-    }, [ selectedGenre ]);
+    const genreCount = selectedGenre ? page.total : null;
 
     useEffect(() => {
         const preferences = readCatalogPreferences(user?.id ?? null, preferenceScope);
@@ -71,7 +67,7 @@ function HomePage() {
             </button>
             <span className="shrink-0 text-muted-foreground">/</span>
             <span className="min-w-0 truncate text-primary">
-                {selectedGenre} ({genreCount ?? '...'})
+                {selectedGenre} ({genreCount ?? 0})
             </span>
         </span>
     ) : undefined, [ genreCount, handleGenreChange, selectedGenre ]);
@@ -86,7 +82,7 @@ function HomePage() {
             onDirChange={handleDirChange}
         />
     ), [ dir, handleDirChange, handleQueryChange, handleSortChange, q, sort ]);
-    const galleryQuery = useMemo(() => ({ q, sort, dir }), [ dir, q, sort ]);
+    const galleryQuery = useMemo(() => ({ q, sort, dir, genre }), [ dir, genre, q, sort ]);
 
     return (
         <div className="flex flex-col gap-6">
@@ -100,7 +96,6 @@ function HomePage() {
                 userId={user?.id ?? null}
                 selectedGenre={selectedGenre}
                 onSelectedGenreChange={handleGenreChange}
-                onGenreCountChange={setGenreCount}
             />
         </div>
     );
