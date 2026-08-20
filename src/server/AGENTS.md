@@ -15,8 +15,16 @@
 - `auth.ts` — sign up/sign in/sign out/getSessionUser.
 - `session.ts` — server-only cookie/session helpers.
 - `password.ts` — scrypt hashing.
-- `movies.ts` — каталог, поиск, пагинация, CRUD, рейтинги, watch lists.
-- `movie-lookup.ts` — `lookupMovieCandidates` для выбора источника данных перед автозаполнением; `lookupMovie` оставлен совместимым wrapper. Providers лежат в `movie-lookup-providers/`: `kinopoisk.dev` работает при `KINOPOISK_DEV_TOKEN`, `kinopoiskapiunofficial.tech` при `KINOPOISK_UNOFFICIAL_TOKEN`, Wikipedia/Wikidata остается fallback без токенов.
+- `movies.ts` — каталог, поиск, пагинация, CRUD, рейтинги, watch lists и
+  транзакционное сохранение подробных snapshot сезонов/серий.
+- `movie-lookup.ts` — `lookupMovieCandidates` возвращает легкие candidates,
+  `loadMovieLookupDetails` загружает детали выбранного provider/external ID;
+  `lookupMovie` оставлен совместимым wrapper. Providers лежат в
+  `movie-lookup-providers/`: `kinopoisk.dev` работает при
+  `KINOPOISK_DEV_TOKEN` и основной для детальных серий,
+  `kinopoiskapiunofficial.tech` при `KINOPOISK_UNOFFICIAL_TOKEN` используется
+  fallback, Wikipedia/Wikidata остается fallback без токенов только для
+  базовых метаданных.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
 - `notifications.ts` — уведомления для фильмов, комментариев и chat messages.
 - `chat.ts` — общий global thread, direct threads только с друзьями, polling data, read counters, replies/images/edit/delete.
@@ -35,6 +43,31 @@
 - Любое изменение schema требует миграции: `pnpm db:migrate:dev`.
 - Production применяет `prisma migrate deploy` из Docker CMD.
 - После schema changes запускать `pnpm db:generate`, если Prisma client не обновился автоматически.
+- Подробности сериалов хранятся нормализованно: `Movie.seriesSeasons` и
+  `SeriesSeason.episodes`, с cascade delete и уникальностью номера в пределах
+  родителя. Сопоставляй и сохраняй данные через
+  `normalizeSeriesMetadata()`/`seriesSnapshotWriteData()`, не через ручные
+  массивы строк.
+- `seasonsCount` и `episodesPerSeason` остаются summary и fallback для старых
+  данных. List/card queries не должны включать `seriesSeasons` или `episodes`;
+  их загружает только `getMovie` с порядком по номеру сезона и серии.
+- Новый непустой нормализованный snapshot заменяет старый в одной транзакции.
+  При пустом/неуспешном detail lookup сохраняй текущие snapshot и summary. При
+  переводе записи из `SERIES` в другой kind очищай подробные строки и summary.
+- `metadataProvider` и `metadataExternalId` — выбранный источник; не меняй их
+  без явно submitted source. `metadataUpdatedAt` обновляй только после
+  успешного detailed import, не при обычном save, Wikidata или provider error.
+
+## Проверки подробных серий
+
+```bash
+pnpm test:series-metadata
+pnpm test:lookup
+pnpm test:movie-form-flow
+pnpm test:movie-navigation-detail
+pnpm typecheck
+pnpm build
+```
 
 ## Uploads
 

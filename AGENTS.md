@@ -13,6 +13,7 @@
 
 ```bash
 pnpm dev             # dev server, порт 3002
+pnpm test            # полный набор contract/unit тестов
 pnpm build           # production build
 pnpm typecheck       # tsc --noEmit
 
@@ -38,8 +39,10 @@ Compose project; при старте контейнера выполняется
 Runtime env: `/opt/ayurash/env/ay-movies.env`. Нужны `DATABASE_URL`,
 `SESSION_SECRET`, `WEB_ALLOWED_HOSTS` и `S3_*`. OpenAI не используется:
 `movie-lookup.ts` получает кандидатов из `kinopoisk.dev`, если задан
-`KINOPOISK_DEV_TOKEN`, из `kinopoiskapiunofficial.tech`, если задан
-`KINOPOISK_UNOFFICIAL_TOKEN`, и из Wikipedia/Wikidata как fallback.
+`KINOPOISK_DEV_TOKEN`, затем из `kinopoiskapiunofficial.tech`, если задан
+`KINOPOISK_UNOFFICIAL_TOKEN`, и из Wikipedia/Wikidata как fallback. Токены
+провайдеров остаются только на сервере: не логируй, не сериализуй в браузер и
+не добавляй в примеры env.
 
 ## Архитектура
 
@@ -55,6 +58,9 @@ Runtime env: `/opt/ayurash/env/ay-movies.env`. Нужны `DATABASE_URL`,
 Функции приложения:
 - Каталог фильмов/сериалов/мультфильмов с пагинацией, поиском, сортировкой, фильтрами и группировками по происхождению, странам и жанрам.
 - Карточки, страницы деталей, несколько ссылок на трейлеры, ссылки "где смотреть", рейтинги 1-5, комментарии, watch list.
+- У сериалов есть совместимые summary-поля `seasonsCount`/`episodesPerSeason` и
+  нормализованные `SeriesSeason`/`SeriesEpisode` с локальными и оригинальными
+  названиями, описаниями, датами и изображениями эпизодов.
 - Роли `USER`/`ADMIN`; `ayurash@me.com` всегда admin через `resolveRole`.
 - Dashboard: admin-only администрирование пользователей. Друзья живут на отдельной странице `/friends` из меню пользователя.
 - Профиль в диалоге, аватар пользователя, admin badge.
@@ -71,6 +77,43 @@ Runtime env: `/opt/ayurash/env/ay-movies.env`. Нужны `DATABASE_URL`,
 - Не делай top-level helper `getAuthUser()` в server-модуле, который сам импортируется UI. Импортируй `./session` внутри handler.
 - Type-only imports допустимы: `import type { PrismaClient } from '@prisma/client'`.
 - После сомнительных изменений запускай `pnpm build`, потому что `pnpm typecheck` такие ошибки не ловит.
+
+## Метаданные сериалов и lookup
+
+- Поиск фильма двухэтапный: `lookupMovieCandidates` возвращает только легкие
+  карточки, а `loadMovieLookupDetails` загружает полные данные только после
+  выбора точного кандидата. Для сохраненного источника кнопка `Обновить` идет
+  напрямую по `metadataProvider` и `metadataExternalId`, без нового поиска.
+- `kinopoisk.dev` дает подробные сезоны и серии и является основным провайдером
+  при наличии токена. `kinopoiskapiunofficial.tech` используется fallback;
+  Wikipedia/Wikidata допускаются только для базовой информации и не содержат
+  подробностей эпизодов.
+- Перед записью `normalizeSeriesMetadata()` удаляет невалидные/повторные номера,
+  нормализует пустые строки и даты, сортирует сезоны и серии. Данные хранятся в
+  `Movie.seriesSeasons` и `SeriesSeason.episodes`; списки и карточки читают
+  только summary-поля без join к подробным таблицам.
+- Снимок подробных данных заменяет старый только если после нормализации он
+  непустой. Замена, обновление summary и создание вложенных строк выполняются
+  одной транзакцией. Пустой или неуспешный ответ сохраняет прежние snapshot и
+  summary.
+- `metadataProvider` и `metadataExternalId` сохраняются только как явно
+  переданный источник. `metadataUpdatedAt` меняется только после успешного
+  подробного импорта, а не при обычном редактировании или ошибке провайдера.
+- Сезоны и серии не редактируются вручную: форма удерживает импортированный
+  snapshot скрыто и отправляет его при сохранении. Старые сериалы без строк
+  `SeriesSeason` продолжают показывать generic список из summary-полей.
+- Миграция `prisma/migrations/20260820170000_series_episode_metadata` добавляет
+  source-поля и таблицы без backfill; production применяет ее через
+  `prisma migrate deploy` при старте контейнера.
+
+Полезные focused проверки:
+
+```bash
+pnpm test:series-metadata
+pnpm test:lookup
+pnpm test:movie-form-flow
+pnpm test:movie-navigation-detail
+```
 
 ## Uploads и S3
 
