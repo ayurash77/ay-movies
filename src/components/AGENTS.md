@@ -35,3 +35,16 @@
 - `MovieCard` передает текущий URL каталога в search param `from`, чтобы detail-страница возвращала пользователя в тот же фильтр/жанр/сортировку.
 - Для сериалов показывай сезоны и количество серий.
 - Галереи должны поддерживать поиск/сортировку/группировки без layout shift.
+- `MovieRatings` показывает только доступные provider snapshots и отдельный
+  интерактивный рейтинг AY Movies. `MovieCast` использует локальные person
+  links, разворачивает полный импортированный cast и показывает `starring`
+  только как fallback.
+- `PersonFilmography` ведет локальные записи на movie detail с `from`, внешние
+  открывает на Кинопоиске в новой вкладке; портреты/постеры имеют стабильный
+  placeholder.
+- `ReviewsSection` — публичная терминология для физических `Comment` rows.
+  Карточка показывает avatar/name и открывает `ProfileDialog` через событие
+  `ay-movies:open-profile`. Один общий `mutationLock` сериализует add/update/
+  delete и блокирует открытие редактора во время mutation.
+
+Focused проверки: `pnpm test:movie-detail-rich` и `pnpm test:reviews`.

@@ -23,6 +23,10 @@
 
 - Каталог фильтрует выбранный жанр через URL search param `genre`; счетчик в header берется из `searchMovies().total`, не из клиентского callback.
 - Detail `/movies/$movieId` принимает search param `from`; back button ведет в этот безопасный внутренний URL или `/`.
+- Detail рендерит только сохраненные ratings/cast и не вызывает metadata
+  provider. В `Описание` остается только `movie.description`; затем идут
+  ratings, cast, watch links и рецензии. При пустом rich cast показывается
+  legacy `starring`.
 - Для сериалов detail показывает вкладки `О сериале` и `Сезоны и серии`.
   `SeriesSeasons` отображает нормализованные подробные данные из
   `movie.seriesSeasons` (названия, даты, описание, кадры) с сезонным
@@ -36,6 +40,18 @@
 - Ручных полей `Сезонов` и `Серий` в форме нет. `seriesSeasons` — скрытое
   импортируемое состояние; timestamp импорта выставляется только после
   успешной загрузки деталей.
+
+## People и reviews
+
+- `/people/$personId` принимает локальный `Person.id`; loader вызывает
+  `getPerson`. Filmography ведет на `/movies/$movieId` для локальных совпадений
+  и на `kinopoisk.ru/film/<externalId>` для внешних записей.
+- Movie detail загружает `getReviews` отдельно. Автор review открывает общий
+  `ProfileDialog` через `ay-movies:open-profile`; пользовательский текст в
+  routes всегда использует термин «рецензия».
+
+Focused проверки: `pnpm test:lookup`, `pnpm test:rich-metadata`,
+`pnpm test:people`, `pnpm test:movie-detail-rich`, `pnpm test:reviews`.
 
 ## Dashboard/Friends
 

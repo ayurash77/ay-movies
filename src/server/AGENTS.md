@@ -16,7 +16,10 @@
 - `session.ts` — server-only cookie/session helpers.
 - `password.ts` — scrypt hashing.
 - `movies.ts` — каталог, поиск, пагинация, CRUD, рейтинги, watch lists и
-  транзакционное сохранение подробных snapshot сезонов/серий.
+  транзакционное сохранение подробных snapshot сезонов/серий и rich metadata.
+- `movie-rich-metadata.ts` — сохраняет rating snapshots и ordered cast через
+  `Person`/`MoviePersonCredit`. Detail читает только БД. Частичные ratings
+  обновляют переданные поля, а пустой/неуспешный cast сохраняет старые credits.
 - `movie-lookup.ts` — `lookupMovieCandidates` параллельно вызывает доступные
   Kinopoisk searches, возвращает легкие candidates и упорядочивает общий список
   с `kinopoisk.dev` как preferred/default. `loadMovieLookupDetails` загружает
@@ -28,7 +31,13 @@
   `KINOPOISK_UNOFFICIAL_TOKEN`; Wikipedia/Wikidata остается fallback без
   токенов только для базовых метаданных.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
-- `notifications.ts` — уведомления для фильмов, комментариев и chat messages.
+- `people.ts` — `getPerson` по локальному `Person.id`: cache TTL 7 дней,
+  stale fallback и merge partial refresh. Полная актерская filmography до 2000
+  записей обогащается пакетами до 100, concurrency 4, deadline 15 секунд;
+  локальные фильмы сопоставляются по `metadataExternalId`.
+- `reviews.ts` — review API поверх физической Prisma-модели `Comment`; avatar,
+  title/sentiment/text, owner/admin edit/delete, максимум 100 записей на detail.
+- `notifications.ts` — уведомления для фильмов, рецензий (`REVIEW`) и chat messages.
 - `chat.ts` — общий global thread, direct threads только с друзьями, polling data, read counters, replies/images/edit/delete.
 - `uploads.ts`, `profile.ts`, `storage.ts` — постеры, аватары, S3/local storage.
 - `sidebar.ts` — счетчики для меню.
@@ -36,7 +45,7 @@
 ## Права
 
 - `resolveRole()` из `src/lib/user-roles.ts` делает `ayurash@me.com` admin независимо от stored role.
-- Admin может управлять ролями, чужими фильмами/комментариями и видимыми chat messages.
+- Admin может управлять ролями, чужими фильмами/рецензиями и видимыми chat messages.
 - Общий чат доступен всем авторизованным пользователям; персональные уведомления о chat messages создаются только для direct threads.
 - Обычный пользователь управляет только своим контентом.
 
@@ -59,14 +68,22 @@
 - `metadataProvider` и `metadataExternalId` — выбранный источник; не меняй их
   без явно submitted source. `metadataUpdatedAt` обновляй только после
   успешного detailed import, не при обычном save, Wikidata или provider error.
+- `Person` и `MoviePersonCredit`, nullable rating columns и review-поля
+  физической таблицы `Comment` добавляет миграция
+  `20260820200000_movie_people_reviews`. Старые rows остаются neutral reviews;
+  внутренние relations/counts по-прежнему называются `comments`.
 
-## Проверки подробных серий
+## Focused проверки
 
 ```bash
 pnpm test:series-metadata
 pnpm test:lookup
+pnpm test:rich-metadata
+pnpm test:people
 pnpm test:movie-form-flow
 pnpm test:movie-navigation-detail
+pnpm test:movie-detail-rich
+pnpm test:reviews
 pnpm typecheck
 pnpm build
 ```

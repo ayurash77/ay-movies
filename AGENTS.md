@@ -4,7 +4,7 @@
 
 ## Рабочий процесс
 
-- После законченной задачи делай осмысленный коммит и `git push origin main`, если пользователь явно не сказал иначе.
+- После законченной задачи делай осмысленный коммит и push текущей ветки, если пользователь явно не сказал иначе.
 - Не трогай `.env` и секреты. Env живет в `.env`, пример в `.env.example`.
 - Перед изменениями смотри текущие паттерны в коде. Не делай широкие рефакторы без необходимости.
 - Если меняешь Prisma schema, создавай миграцию через `pnpm db:migrate:dev`; bare `db:push` использовать только для локальных экспериментов.
@@ -29,15 +29,16 @@ pnpm db:studio       # Prisma Studio
 
 ## Деплой
 
-Production: `https://movies.ayurash.ru` на общем Timeweb VDS. Исходники лежат
-в `/opt/ayurash/apps/ay-movies`, Compose service — `ay-movies`, host port `3102`
-за Caddy. PostgreSQL database `ay_movies` работает в service `postgres` того же
-Compose project; при старте контейнера выполняется `prisma migrate deploy`.
-Загрузки остаются в Timeweb S3, базы и конфигурация ежедневно сохраняются в
-зашифрованный restic backup. `movienest.ru` — только legacy redirect.
+Timeweb VDS: domain `movies.ayurash.ru`, исходники
+`/opt/ayurash/apps/ay-movies`, Compose project `/opt/ayurash`, service
+`ay-movies`, runtime env `/opt/ayurash/env/ay-movies.env`. Контейнер применяет
+миграции через `prisma migrate deploy`; для этой функции нужна
+`20260820200000_movie_people_reviews`. Env names: `DATABASE_URL`,
+`SESSION_SECRET`, `WEB_ALLOWED_HOSTS`, `S3_*`, `KINOPOISK_DEV_TOKEN`,
+`KINOPOISK_DEV_BASE_URL`, `KINOPOISK_UNOFFICIAL_TOKEN`,
+`KINOPOISK_UNOFFICIAL_BASE_URL`.
 
-Runtime env: `/opt/ayurash/env/ay-movies.env`. Нужны `DATABASE_URL`,
-`SESSION_SECRET`, `WEB_ALLOWED_HOSTS` и `S3_*`. OpenAI не используется:
+OpenAI не используется:
 `lookupMovieCandidates` параллельно обращается к доступным Kinopoisk search
 providers, а затем упорядочивает результаты с `kinopoisk.dev` как default.
 Wikipedia/Wikidata остаются basic fallback. При загрузке деталей выбранный
@@ -59,14 +60,14 @@ default-порядок не переопределяет явный выбор �
 
 Функции приложения:
 - Каталог фильмов/сериалов/мультфильмов с пагинацией, поиском, сортировкой, фильтрами и группировками по происхождению, странам и жанрам.
-- Карточки, страницы деталей, несколько ссылок на трейлеры, ссылки "где смотреть", рейтинги 1-5, комментарии, watch list.
+- Карточки, страницы деталей, несколько ссылок на трейлеры, ссылки "где смотреть", рейтинги 1-5, рецензии, watch list.
 - У сериалов есть совместимые summary-поля `seasonsCount`/`episodesPerSeason` и
   нормализованные `SeriesSeason`/`SeriesEpisode` с локальными и оригинальными
   названиями, описаниями, датами и изображениями эпизодов.
 - Роли `USER`/`ADMIN`; `ayurash@me.com` всегда admin через `resolveRole`.
 - Dashboard: admin-only администрирование пользователей. Друзья живут на отдельной странице `/friends` из меню пользователя.
 - Профиль в диалоге, аватар пользователя, admin badge.
-- Друзья, подписки, уведомления о новых фильмах, комментариях и сообщениях.
+- Друзья, подписки, уведомления о новых фильмах, рецензиях и сообщениях.
 - Чат: закрепленный общий чат, личные диалоги с друзьями, polling, unread counters, ответы, фото, context menu, редактирование/удаление своих сообщений; admin может управлять любыми видимыми сообщениями.
 - Темы оформления из `src/lib/theme.ts`; default `ayu`.
 
@@ -80,7 +81,7 @@ default-порядок не переопределяет явный выбор �
 - Type-only imports допустимы: `import type { PrismaClient } from '@prisma/client'`.
 - После сомнительных изменений запускай `pnpm build`, потому что `pnpm typecheck` такие ошибки не ловит.
 
-## Метаданные сериалов и lookup
+## Метаданные, персоны и рецензии
 
 - Поиск фильма двухэтапный: `lookupMovieCandidates` параллельно вызывает
   доступные Kinopoisk searches, упорядочивает их с `kinopoisk.dev` как
@@ -92,6 +93,22 @@ default-порядок не переопределяет явный выбор �
   пользователя. Для сохраненного источника кнопка `Обновить` сначала идет
   напрямую по `metadataProvider` и `metadataExternalId`; при ошибке или пустом
   результате UI делает fallback title search.
+- Ratings и cast приходят только из detailed `kinopoisk.dev` lookup и хранятся
+  локальным snapshot в `Movie`, `Person` и `MoviePersonCredit`. Detail фильма
+  читает snapshot из БД и никогда не вызывает провайдера. Успешный частичный
+  refresh обновляет только валидные значения; пустые ratings/cast и ошибки не
+  стирают ранее сохраненные данные. `starring` остается legacy fallback.
+- `/people/$personId` использует локальный `Person.id`. Профиль и полная
+  актерская фильмография кэшируются на 7 дней; stale cache возвращается при
+  ошибке, partial refresh объединяется со старыми полями и не становится fresh.
+  Filmography ограничена 2000 записями, enrichment идет пакетами до 100,
+  concurrency 4 и с deadline 15 секунд. Локальные совпадения по
+  `metadataExternalId` ведут на `/movies/$movieId`, остальные — на Кинопоиск.
+- В UI/API используется термин `рецензия`, но физическая Prisma-модель/таблица
+  `Comment` и внутренние `_count.comments` сохранены. Автор и `ADMIN` могут
+  редактировать/удалять рецензию; карточка показывает avatar и открывает
+  profile dialog. UI допускает только одну review mutation одновременно,
+  уведомления имеют type `REVIEW`.
 - Перед записью `normalizeSeriesMetadata()` удаляет невалидные/повторные номера,
   нормализует пустые строки и даты, сортирует сезоны и серии. Данные хранятся в
   `Movie.seriesSeasons` и `SeriesSeason.episodes`; списки и карточки читают
@@ -115,8 +132,12 @@ default-порядок не переопределяет явный выбор �
 ```bash
 pnpm test:series-metadata
 pnpm test:lookup
+pnpm test:rich-metadata
+pnpm test:people
 pnpm test:movie-form-flow
 pnpm test:movie-navigation-detail
+pnpm test:movie-detail-rich
+pnpm test:reviews
 ```
 
 ## Uploads и S3
