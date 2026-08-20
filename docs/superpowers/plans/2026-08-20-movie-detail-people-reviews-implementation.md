@@ -639,17 +639,14 @@ git push origin main
 
 - [ ] **Step 4: Deploy to the Timeweb VDS**
 
-Use the established deployment directory and Compose service:
+Use the shared infra source-sync script, then rebuild the Compose service. The
+VDS source directory is not a Git checkout:
 
 ```bash
-ssh deploy@72.56.8.147 '
-  set -eu
-  git -C /opt/ayurash/apps/ay-movies pull --ff-only origin main
-  cd /opt/ayurash
-  docker compose build ay-movies
-  docker compose up -d ay-movies
-  docker compose ps ay-movies
-'
+/Users/ayurash/Development/_Projects/ayurash-infra/scripts/deploy-app-source.sh \
+  ay-movies /Users/ayurash/Development/_Projects/ay-movies
+ssh deploy@72.56.8.147 \
+  'cd /opt/ayurash && docker compose up -d --build ay-movies && docker compose ps ay-movies'
 ```
 
 The container startup must apply `20260820200000_movie_people_reviews` through

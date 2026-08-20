@@ -38,6 +38,11 @@ Timeweb VDS: domain `movies.ayurash.ru`, исходники
 `KINOPOISK_DEV_BASE_URL`, `KINOPOISK_UNOFFICIAL_TOKEN`,
 `KINOPOISK_UNOFFICIAL_BASE_URL`.
 
+Production source directory не является Git checkout. Не запускай там
+`git pull`: синхронизируй tracked-файлы локального `main` через
+`/Users/ayurash/Development/_Projects/ayurash-infra/scripts/deploy-app-source.sh`,
+затем выполняй `docker compose up -d --build ay-movies` из `/opt/ayurash`.
+
 OpenAI не используется:
 `lookupMovieCandidates` параллельно обращается к доступным Kinopoisk search
 providers, а затем упорядочивает результаты с `kinopoisk.dev` как default.
