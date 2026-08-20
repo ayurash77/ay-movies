@@ -19,7 +19,7 @@ export const movieLookupSchema = z.object({
     posterUrl: z.string().nullish(),
 });
 
-export const lookupProviderSchema = z.enum([ 'kinopoisk-dev', 'wikidata' ]);
+export const lookupProviderSchema = z.enum([ 'kinopoisk-dev', 'kinopoisk-unofficial', 'wikidata' ]);
 
 export const movieLookupCandidateSchema = movieLookupSchema.extend({
     provider: lookupProviderSchema,

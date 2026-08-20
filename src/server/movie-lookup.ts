@@ -20,17 +20,20 @@ async function resolveLookupCandidates(data: z.infer<typeof lookupInputSchema>) 
 
     const [
         { lookupKinopoiskCandidates },
+        { lookupKinopoiskUnofficialCandidates },
         { lookupWikidataCandidates },
     ] = await Promise.all([
         import('./movie-lookup-providers/kinopoisk-dev'),
+        import('./movie-lookup-providers/kinopoisk-unofficial'),
         import('./movie-lookup-providers/wikidata'),
     ]);
-    const [ kinopoiskCandidates, wikidataCandidates ] = await Promise.all([
+    const [ kinopoiskCandidates, kinopoiskUnofficialCandidates, wikidataCandidates ] = await Promise.all([
         lookupKinopoiskCandidates(data.title, data.kind),
+        lookupKinopoiskUnofficialCandidates(data.title, data.kind),
         lookupWikidataCandidates(data.title),
     ]);
     const seen = new Set<string>();
-    const candidates = [ ...kinopoiskCandidates, ...wikidataCandidates ]
+    const candidates = [ ...kinopoiskCandidates, ...kinopoiskUnofficialCandidates, ...wikidataCandidates ]
         .filter((candidate) => !data.kind || candidate.kind === data.kind)
         .filter((candidate) => {
             const key = `${candidate.provider}:${candidate.externalId ?? candidate.title}:${candidate.year ?? ''}`.toLowerCase();

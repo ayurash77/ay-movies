@@ -7,6 +7,7 @@ import {
     type MovieLookupCandidate,
 } from '../src/lib/movie-lookup-types';
 import { mapKinopoiskMovie } from '../src/server/movie-lookup-providers/kinopoisk-dev';
+import { mapKinopoiskUnofficialMovie } from '../src/server/movie-lookup-providers/kinopoisk-unofficial';
 import {
     buildLookupAttempts,
     claimSeriesInfo,
@@ -125,6 +126,52 @@ test('kinopoisk mapper detects cartoons from type and genres', () => {
         genres: [ { name: 'мультфильм' }, { name: 'фантастика' } ],
         countries: [],
         persons: [],
+    });
+
+    assert.equal(candidate?.kind, 'CARTOON');
+});
+
+test('kinopoisk unofficial mapper normalizes detailed series metadata', () => {
+    const candidate = mapKinopoiskUnofficialMovie({
+        kinopoiskId: 464963,
+        type: 'TV_SERIES',
+        nameRu: 'Игра престолов',
+        nameOriginal: 'Game of Thrones',
+        year: 2011,
+        description: 'Борьба за Железный трон.',
+        filmLength: 55,
+        ratingKinopoisk: 9.0,
+        webUrl: 'https://www.kinopoisk.ru/series/464963/',
+        posterUrlPreview: 'https://example.com/got-small.jpg',
+        posterUrl: 'https://example.com/got.jpg',
+        countries: [ { country: 'США' }, { country: 'Великобритания' } ],
+        genres: [ { genre: 'драма' }, { genre: 'фэнтези' } ],
+    }, [
+        { nameRu: 'Дэвид Бениофф', professionKey: 'DIRECTOR' },
+        { nameRu: 'Питер Динклэйдж', professionKey: 'ACTOR' },
+    ], [ 10, 10, 10, 10, 10, 10, 7, 6 ]);
+
+    assert.equal(candidate?.provider, 'kinopoisk-unofficial');
+    assert.equal(candidate?.kind, 'SERIES');
+    assert.equal(candidate?.title, 'Игра престолов');
+    assert.equal(candidate?.originalTitle, 'Game of Thrones');
+    assert.equal(candidate?.country, 'США, Великобритания');
+    assert.equal(candidate?.director, 'Дэвид Бениофф');
+    assert.deepEqual(candidate?.starring, [ 'Питер Динклэйдж' ]);
+    assert.deepEqual(candidate?.episodesPerSeason, [ 10, 10, 10, 10, 10, 10, 7, 6 ]);
+    assert.equal(candidate?.seasonsCount, 8);
+    assert.equal(candidate?.sourceUrl, 'https://www.kinopoisk.ru/series/464963/');
+});
+
+test('kinopoisk unofficial mapper detects cartoons from genres', () => {
+    const candidate = mapKinopoiskUnofficialMovie({
+        kinopoiskId: 1,
+        type: 'FILM',
+        nameRu: 'ВАЛЛ-И',
+        nameOriginal: 'WALL-E',
+        year: 2008,
+        genres: [ { genre: 'мультфильм' }, { genre: 'фантастика' } ],
+        countries: [],
     });
 
     assert.equal(candidate?.kind, 'CARTOON');

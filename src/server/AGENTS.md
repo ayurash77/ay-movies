@@ -16,7 +16,7 @@
 - `session.ts` — server-only cookie/session helpers.
 - `password.ts` — scrypt hashing.
 - `movies.ts` — каталог, поиск, пагинация, CRUD, рейтинги, watch lists.
-- `movie-lookup.ts` — `lookupMovieCandidates` для выбора источника данных перед автозаполнением; `lookupMovie` оставлен совместимым wrapper. Providers лежат в `movie-lookup-providers/`: `kinopoisk.dev` работает при `KINOPOISK_DEV_TOKEN`, Wikipedia/Wikidata остается fallback без токенов.
+- `movie-lookup.ts` — `lookupMovieCandidates` для выбора источника данных перед автозаполнением; `lookupMovie` оставлен совместимым wrapper. Providers лежат в `movie-lookup-providers/`: `kinopoisk.dev` работает при `KINOPOISK_DEV_TOKEN`, `kinopoiskapiunofficial.tech` при `KINOPOISK_UNOFFICIAL_TOKEN`, Wikipedia/Wikidata остается fallback без токенов.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
 - `notifications.ts` — уведомления для фильмов, комментариев и chat messages.
 - `chat.ts` — общий global thread, direct threads только с друзьями, polling data, read counters, replies/images/edit/delete.
