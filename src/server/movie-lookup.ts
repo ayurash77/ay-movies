@@ -20,6 +20,10 @@ const lookupDetailsInputSchema = z.object({
     externalId: z.string().trim().min(1).max(100),
 });
 
+function isWikidataEntityId(externalId: string) {
+    return /^Q\d+$/i.test(externalId);
+}
+
 async function resolveLookupCandidates(data: z.infer<typeof lookupInputSchema>) {
     const { getAuthUser } = await import('./session');
     const user = await getAuthUser();
@@ -84,7 +88,7 @@ export const loadMovieLookupDetails = createServerFn({ method: 'POST' })
         const { getAuthUser } = await import('./session');
         if (!await getAuthUser()) return { ok: false as const, error: 'Требуется авторизация' };
 
-        if (data.provider === 'wikidata') {
+        if (data.provider === 'wikidata' || isWikidataEntityId(data.externalId)) {
             return {
                 ok: false as const,
                 error: 'Подробные данные для Wikipedia / Wikidata недоступны',
@@ -98,8 +102,12 @@ export const loadMovieLookupDetails = createServerFn({ method: 'POST' })
             : [ loadKinopoiskCandidate, loadKinopoiskUnofficialCandidate ];
 
         for (const load of loaders) {
-            const movie = await load(data.externalId);
-            if (movie) return { ok: true as const, movie };
+            try {
+                const movie = await load(data.externalId);
+                if (movie) return { ok: true as const, movie };
+            } catch {
+                // Continue with the fallback without exposing provider errors.
+            }
         }
 
         return { ok: false as const, error: 'Не удалось загрузить подробные данные' };

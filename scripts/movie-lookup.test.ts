@@ -294,6 +294,25 @@ test('movie lookup exports authenticated detail loading with validated provider 
     assert.match(source, /\[ loadKinopoiskCandidate, loadKinopoiskUnofficialCandidate \]/);
 });
 
+test('movie lookup rejects Wikidata entity ids before importing Kinopoisk loaders', () => {
+    const source = readFileSync('src/server/movie-lookup.ts', 'utf8');
+    const detailsHandler = source.slice(source.indexOf('export const loadMovieLookupDetails'));
+
+    assert.match(detailsHandler, /isWikidataEntityId\(data\.externalId\)/);
+    assert.ok(
+        detailsHandler.indexOf('isWikidataEntityId(data.externalId)')
+            < detailsHandler.indexOf("import('./movie-lookup-providers/kinopoisk-dev')"),
+    );
+});
+
+test('movie lookup continues to fallback after a detail loader throws', () => {
+    const source = readFileSync('src/server/movie-lookup.ts', 'utf8');
+    const detailsHandler = source.slice(source.indexOf('export const loadMovieLookupDetails'));
+
+    assert.match(detailsHandler, /for \(const load of loaders\) \{\s*try \{\s*const movie = await load\(data\.externalId\)/);
+    assert.match(detailsHandler, /await load\(data\.externalId\);?[\s\S]*?catch \{/);
+});
+
 test('provider searches do not load details for every candidate', () => {
     const kinopoiskSource = readFileSync('src/server/movie-lookup-providers/kinopoisk-dev.ts', 'utf8');
     const unofficialSource = readFileSync('src/server/movie-lookup-providers/kinopoisk-unofficial.ts', 'utf8');
