@@ -440,6 +440,59 @@ test('person loader ignores malformed enrichment overrides and keeps base title'
     }
 });
 
+const malformedEnrichmentSummaries = [
+    [ 'fractional year', { year: 2020.5 } ],
+    [ 'out-of-range year', { year: 2201 } ],
+    [ 'overlong type', { type: 'movie'.repeat(21) } ],
+] as const;
+
+for (const [ caseName, malformedSummary ] of malformedEnrichmentSummaries) {
+    test(`person loader excludes ${caseName} enrichment and keeps base filmography`, async () => {
+        const previousFetch = globalThis.fetch;
+        const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+        const previousBaseUrl = process.env.KINOPOISK_DEV_BASE_URL;
+
+        process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+        process.env.KINOPOISK_DEV_BASE_URL = 'https://kinopoisk.test';
+        globalThis.fetch = async (input) => {
+            const url = new URL(String(input));
+            if (url.pathname === '/v1.4/person/42') {
+                return Response.json({
+                    id: 42,
+                    name: 'Актёр',
+                    movies: [ {
+                        id: 100,
+                        name: 'Базовое название',
+                        enProfession: 'actor',
+                        description: 'Базовая роль',
+                    } ],
+                });
+            }
+            return Response.json({
+                docs: [ {
+                    id: 100,
+                    name: 'Некорректное переопределение',
+                    ...malformedSummary,
+                } ],
+            });
+        };
+
+        try {
+            const loaded = await loadKinopoiskPerson('42');
+
+            assert.equal(loaded?.complete, false);
+            assert.equal(loaded?.profile.filmography[0]?.title, 'Базовое название');
+            assert.equal(loaded?.profile.filmography[0]?.role, 'Базовая роль');
+        } finally {
+            globalThis.fetch = previousFetch;
+            if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+            else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+            if (previousBaseUrl === undefined) delete process.env.KINOPOISK_DEV_BASE_URL;
+            else process.env.KINOPOISK_DEV_BASE_URL = previousBaseUrl;
+        }
+    });
+}
+
 function createStore(person: Record<string, unknown>) {
     const calls = {
         updates: [] as Array<Record<string, unknown>>,

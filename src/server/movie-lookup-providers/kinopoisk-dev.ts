@@ -1,5 +1,6 @@
 import type { MovieKind } from '@/lib/movie-data';
 import {
+    personFilmographyEntrySchema,
     personProfileSchema,
     type PersonProfile,
     type PersonProfileLoadResult,
@@ -159,7 +160,8 @@ function validPersonPayload(value: unknown): (Record<string, unknown> & { movies
 
 function movieSummaryShape(value: unknown) {
     const data = record(value);
-    if (!data || !externalId(data.id)) return false;
+    const id = data ? externalId(data.id) : null;
+    if (!data || !id) return false;
     if (
         !nullableString(data.name)
         || !nullableString(data.alternativeName)
@@ -178,11 +180,26 @@ function movieSummaryShape(value: unknown) {
     }
 
     const ratingData = data.rating == null ? null : record(data.rating);
-    return data.rating == null || Boolean(
+    if (data.rating != null && !(
         ratingData
         && nullableNumber(ratingData.kp)
-        && nullableNumber(ratingData.imdb),
-    );
+        && nullableNumber(ratingData.imdb)
+    )) {
+        return false;
+    }
+
+    const posterUrl = text(poster?.previewUrl) || text(poster?.url);
+    return personFilmographyEntrySchema.safeParse({
+        externalId: id,
+        title: boundedText(data.name)
+            || boundedText(data.alternativeName)
+            || boundedText(data.enName)
+            || 'movie',
+        year: data.year ?? null,
+        posterUrl: posterUrl && isHttpUrl(posterUrl) ? posterUrl : null,
+        type: boundedText(data.type) || null,
+        rating: movieRating(data as KinopoiskMovie),
+    }).success;
 }
 
 function normalize(value: string) {
