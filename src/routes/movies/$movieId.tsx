@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { PageTitle } from '@/components/AppTitle';
-import { CommentsSection } from '@/components/movies/CommentsSection';
+import { ReviewsSection } from '@/components/movies/ReviewsSection';
 import { MovieCast } from '@/components/movies/MovieCast';
 import { MoviePoster } from '@/components/movies/MoviePoster';
 import { MovieRatings } from '@/components/movies/MovieRatings';
@@ -15,8 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MovieDetails } from '@/lib/movie-data';
 import { normalizeStoredGenres } from '@/lib/movie-merge';
-import { getComments, type MovieComment } from '@/server/comments';
 import { getMovie, rateMovie } from '@/server/movies';
+import { getReviews, type MovieReview } from '@/server/reviews';
 
 function trailerEmbedUrl(url: string) {
     try {
@@ -124,9 +124,9 @@ function WatchLinksSection({ movie }: { movie: Pick<MovieDetails, 'watchLinks'> 
     );
 }
 
-function AboutSection({ movie, comments, isAuthed, onRate }: {
+function AboutSection({ movie, reviews, isAuthed, onRate }: {
     movie: MovieDetails;
-    comments: MovieComment[];
+    reviews: MovieReview[];
     isAuthed: boolean;
     onRate: (value: number) => void;
 }) {
@@ -149,18 +149,18 @@ function AboutSection({ movie, comments, isAuthed, onRate }: {
             />
             <MovieCast cast={movie.cast} legacyStarring={movie.starring}/>
             <WatchLinksSection movie={movie}/>
-            <CommentsSection
+            <ReviewsSection
                 movieId={movie.id}
-                comments={comments}
+                reviews={reviews}
                 isAuthed={isAuthed}
             />
         </div>
     );
 }
 
-function SeriesTabs({ movie, comments, isAuthed, onRate }: {
+function SeriesTabs({ movie, reviews, isAuthed, onRate }: {
     movie: MovieDetails;
-    comments: MovieComment[];
+    reviews: MovieReview[];
     isAuthed: boolean;
     onRate: (value: number) => void;
 }) {
@@ -181,7 +181,7 @@ function SeriesTabs({ movie, comments, isAuthed, onRate }: {
                 </TabsTrigger>
             </TabsList>
             <TabsContent value="about">
-                <AboutSection movie={movie} comments={comments} isAuthed={isAuthed} onRate={onRate}/>
+                <AboutSection movie={movie} reviews={reviews} isAuthed={isAuthed} onRate={onRate}/>
             </TabsContent>
             <TabsContent value="seasons">
                 <SeriesSeasons movie={movie}/>
@@ -195,12 +195,12 @@ export const Route = createFileRoute('/movies/$movieId')({
         from: z.string().optional(),
     }),
     loader: async ({ params }) => {
-        const [ movie, comments ] = await Promise.all([
+        const [ movie, reviews ] = await Promise.all([
             getMovie({ data: { id: params.movieId } }),
-            getComments({ data: { movieId: params.movieId } }),
+            getReviews({ data: { movieId: params.movieId } }),
         ]);
         if (!movie) throw notFound();
-        return { movie, comments };
+        return { movie, reviews };
     },
     component: MoviePage,
     notFoundComponent: () => (
@@ -214,7 +214,7 @@ export const Route = createFileRoute('/movies/$movieId')({
 });
 
 function MoviePage() {
-    const { movie, comments } = Route.useLoaderData();
+    const { movie, reviews } = Route.useLoaderData();
     const { from } = Route.useSearch();
     const { user } = Route.useRouteContext();
     const router = useRouter();
@@ -314,14 +314,14 @@ function MoviePage() {
                     {movie.kind === 'SERIES' ? (
                         <SeriesTabs
                             movie={movie}
-                            comments={comments}
+                            reviews={reviews}
                             isAuthed={Boolean(user)}
                             onRate={handleRate}
                         />
                     ) : (
                         <AboutSection
                             movie={movie}
-                            comments={comments}
+                            reviews={reviews}
                             isAuthed={Boolean(user)}
                             onRate={handleRate}
                         />

@@ -79,7 +79,7 @@ function SettingsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Имя</CardTitle>
-                    <CardDescription>Отображается в комментариях и на добавленных фильмах</CardDescription>
+                    <CardDescription>Отображается в рецензиях и на добавленных фильмах</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleName} className="flex flex-col gap-3 sm:flex-row sm:items-end">

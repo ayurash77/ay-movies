@@ -58,7 +58,11 @@ export function MovieCard({ movie, className }: { movie: MovieCardData; classNam
                     <span className="text-xs text-muted-foreground">
                         {movie.ratingCount > 0 ? formatRating(movie.avgRating) : '—'}
                     </span>
-                    <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <span
+                        className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground"
+                        aria-label={`Рецензий: ${movie.commentCount}`}
+                        title={`Рецензий: ${movie.commentCount}`}
+                    >
                         <MessageSquare className="size-3.5"/>
                         {movie.commentCount}
                     </span>

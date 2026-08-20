@@ -16,6 +16,8 @@ ADD COLUMN "title" TEXT,
 ADD COLUMN "sentiment" "ReviewSentiment" NOT NULL DEFAULT 'NEUTRAL',
 ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
+UPDATE "Comment" SET "updatedAt" = "createdAt";
+
 -- CreateTable
 CREATE TABLE "Person" (
     "id" TEXT NOT NULL,

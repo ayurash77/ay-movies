@@ -210,7 +210,7 @@ function UserProfilePage() {
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
                         <StatTile icon={<Film/>} value={user.movieCount} label="Фильмов"/>
                         <StatTile icon={<Star/>} value={user.ratingCount} label="Оценок"/>
-                        <StatTile icon={<MessageSquare/>} value={user.commentCount} label="Комментариев"/>
+                        <StatTile icon={<MessageSquare/>} value={user.commentCount} label="Рецензий"/>
                         <StatTile icon={<Bookmark/>} value={user.watchlistCount} label="К просмотру"/>
                         <StatTile icon={<Check/>} value={user.watchedCount} label="Просмотрено"/>
                         <StatTile icon={<Users/>} value={user.friendCount} label="Друзей"/>

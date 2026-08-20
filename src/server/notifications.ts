@@ -122,35 +122,54 @@ async function actorAudienceIds(actorId: string) {
     ].filter((id) => id !== actorId);
 }
 
-export async function createCommentNotifications(commentId: string) {
+export function buildReviewNotification(input: {
+    authorName: string;
+    movieId: string;
+    movieTitle: string;
+    reviewTitle: string | null;
+    reviewText: string;
+}) {
+    const review = [ input.reviewTitle, input.reviewText ].filter(Boolean).join(' — ');
+    const preview = review.length > 180 ? `${review.slice(0, 177)}...` : review;
+    return {
+        type: 'REVIEW',
+        title: `${input.authorName} оставил рецензию`,
+        body: `${input.movieTitle}: ${preview}`,
+        href: `/movies/${input.movieId}`,
+    };
+}
+
+export async function createReviewNotifications(reviewId: string) {
     const db = await getDb();
-    const comment = await db.comment.findUnique({
-        where: { id: commentId },
+    const review = await db.comment.findUnique({
+        where: { id: reviewId },
         select: {
+            title: true,
             text: true,
             userId: true,
             user: { select: { name: true } },
             movie: { select: { id: true, title: true } },
         },
     });
-    if (!comment) return;
+    if (!review) return;
 
-    const recipientIds = await actorAudienceIds(comment.userId);
+    const recipientIds = await actorAudienceIds(review.userId);
     if (!recipientIds.length) return;
 
-    const body = comment.text.length > 180
-        ? `${comment.text.slice(0, 177)}...`
-        : comment.text;
+    const notification = buildReviewNotification({
+        authorName: review.user.name,
+        movieId: review.movie.id,
+        movieTitle: review.movie.title,
+        reviewTitle: review.title,
+        reviewText: review.text,
+    });
 
     await db.notification.createMany({
         data: recipientIds.map((userId) => ({
             userId,
-            actorId: comment.userId,
-            movieId: comment.movie.id,
-            type: 'COMMENT',
-            title: `${comment.user.name} оставил комментарий`,
-            body: `${comment.movie.title}: ${body}`,
-            href: `/movies/${comment.movie.id}`,
+            actorId: review.userId,
+            movieId: review.movie.id,
+            ...notification,
         })),
     });
 }

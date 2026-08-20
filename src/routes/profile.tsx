@@ -208,7 +208,7 @@ function ProfilePage() {
             <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                 <StatTile icon={<Film/>} value={profile.moviesAdded} label="Добавлено"/>
                 <StatTile icon={<Star/>} value={profile.ratingsCount} label="Оценок"/>
-                <StatTile icon={<MessageSquare/>} value={profile.commentsCount} label="Комментариев"/>
+                <StatTile icon={<MessageSquare/>} value={profile.commentsCount} label="Рецензий"/>
                 <StatTile icon={<Bookmark/>} value={profile.watchlistCount} label="К просмотру"/>
                 <StatTile icon={<Check/>} value={profile.watchedCount} label="Просмотрено"/>
             </div>
@@ -217,7 +217,7 @@ function ProfilePage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Данные профиля</CardTitle>
-                        <CardDescription>Имя отображается в комментариях и карточках.</CardDescription>
+                        <CardDescription>Имя отображается в рецензиях и карточках.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={handleName} className="flex flex-col gap-3">

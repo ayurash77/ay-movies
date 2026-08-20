@@ -144,7 +144,7 @@ function AdminUserCardView({ user, roleBusy, canManageRoles, onSetRole }: {
                     </div>
                     <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                     <p className="mt-1 text-[11px] text-muted-foreground/80">
-                        Фильмов: {user.movieCount} · Оценок: {user.ratingCount} · Комментариев: {user.commentCount}
+                        Фильмов: {user.movieCount} · Оценок: {user.ratingCount} · Рецензий: {user.commentCount}
                     </p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground/70">
                         {user.isSelf ? 'Это вы' : user.isFriend ? 'В друзьях' : 'Не в друзьях'} · {user.isFollowing ? 'Вы подписаны' : 'Без подписки'}

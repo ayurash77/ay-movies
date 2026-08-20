@@ -93,7 +93,7 @@ test('movie description is not mixed with repeated metadata or a standalone rati
     assert.doesNotMatch(detail, /Ваша оценка:[\s\S]*<RatingStars/);
 });
 
-test('about section composes trailers, description, ratings, cast, watch links, then comments', () => {
+test('about section composes trailers, description, ratings, cast, watch links, then reviews', () => {
     const detail = read('src/routes/movies/$movieId.tsx');
     const sectionStart = detail.indexOf('function AboutSection');
     const sectionEnd = detail.indexOf('function SeriesTabs');
@@ -105,7 +105,7 @@ test('about section composes trailers, description, ratings, cast, watch links, 
         '<MovieRatings',
         '<MovieCast',
         '<WatchLinksSection',
-        '<CommentsSection',
+        '<ReviewsSection',
     ];
     let previous = -1;
     for (const part of orderedParts) {

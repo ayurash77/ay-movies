@@ -23,12 +23,14 @@ import { Label } from '@/components/ui/label';
 import { formatRuDate } from '@/lib/date-format';
 import { cn } from '@/lib/utils';
 import type { SessionUser } from '@/server/auth';
+import { getUserProfile } from '@/server/dashboard';
 import { changePassword, getMyProfile, type MyProfile, updateName, uploadMyAvatar } from '@/server/profile';
 
 type ProfileDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     user: SessionUser | null;
+    profileUserId?: string | null;
 };
 
 function initials(name: string) {
@@ -58,43 +60,9 @@ function RoleBadge({ role }: { role: string }) {
     );
 }
 
-export function ProfileDialog({ open, onOpenChange, user }: ProfileDialogProps) {
-    const router = useRouter();
-    const fileRef = useRef<HTMLInputElement>(null);
-    const [ profile, setProfile ] = useState<MyProfile | null>(null);
-    const [ isLoading, setIsLoading ] = useState(false);
-    const [ name, setName ] = useState('');
-    const [ currentPassword, setCurrentPassword ] = useState('');
-    const [ newPassword, setNewPassword ] = useState('');
-    const [ confirmPassword, setConfirmPassword ] = useState('');
-    const [ avatarBusy, setAvatarBusy ] = useState(false);
-    const [ nameBusy, setNameBusy ] = useState(false);
-    const [ passwordBusy, setPasswordBusy ] = useState(false);
-
-    const loadProfile = async () => {
-        setIsLoading(true);
-        try {
-            const nextProfile = await getMyProfile();
-            setProfile(nextProfile);
-            setName(nextProfile?.name ?? user?.name ?? '');
-        } catch {
-            toast.error('Не удалось загрузить профиль');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        if (!open || !user) return;
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-        void loadProfile();
-    }, [ open, user?.id ]);
-
-    if (!user) return null;
-
-    const visibleProfile = profile ?? {
+export function profileDialogFallback(user: SessionUser, isOwnProfile: boolean): MyProfile | null {
+    if (!isOwnProfile) return null;
+    return {
         name: user.name,
         email: user.email,
         avatarUrl: user.avatarUrl,
@@ -106,7 +74,69 @@ export function ProfileDialog({ open, onOpenChange, user }: ProfileDialogProps) 
         watchlistCount: 0,
         watchedCount: 0,
     };
-    const joined = formatRuDate(visibleProfile.createdAt);
+}
+
+export function ProfileDialog({ open, onOpenChange, user, profileUserId }: ProfileDialogProps) {
+    const router = useRouter();
+    const fileRef = useRef<HTMLInputElement>(null);
+    const [ profile, setProfile ] = useState<MyProfile | null>(null);
+    const [ profileError, setProfileError ] = useState<string | null>(null);
+    const [ isLoading, setIsLoading ] = useState(false);
+    const [ name, setName ] = useState('');
+    const [ currentPassword, setCurrentPassword ] = useState('');
+    const [ newPassword, setNewPassword ] = useState('');
+    const [ confirmPassword, setConfirmPassword ] = useState('');
+    const [ avatarBusy, setAvatarBusy ] = useState(false);
+    const [ nameBusy, setNameBusy ] = useState(false);
+    const [ passwordBusy, setPasswordBusy ] = useState(false);
+    const isOwnProfile = !profileUserId || profileUserId === user?.id;
+
+    const loadProfile = async () => {
+        setIsLoading(true);
+        setProfileError(null);
+        try {
+            const nextProfile = isOwnProfile
+                ? await getMyProfile()
+                : await getUserProfile({ data: { userId: profileUserId } }).then((result): MyProfile | null => {
+                    if (!result.ok) throw new Error(result.error);
+                    return {
+                        name: result.user.name,
+                        email: result.user.email,
+                        avatarUrl: result.user.avatarUrl,
+                        role: result.user.role,
+                        createdAt: result.user.createdAt,
+                        moviesAdded: result.user.movieCount,
+                        ratingsCount: result.user.ratingCount,
+                        commentsCount: result.user.commentCount,
+                        watchlistCount: result.user.watchlistCount,
+                        watchedCount: result.user.watchedCount,
+                    };
+                });
+            setProfile(nextProfile);
+            setName(nextProfile?.name ?? user?.name ?? '');
+        } catch {
+            const error = 'Не удалось загрузить профиль';
+            setProfileError(error);
+            toast.error(error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!open || !user) return;
+        setProfile(null);
+        setProfileError(null);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        void loadProfile();
+    }, [ open, profileUserId, user?.id ]);
+
+    if (!user) return null;
+
+    const visibleProfile = profile ?? profileDialogFallback(user, isOwnProfile);
+    const joined = visibleProfile ? formatRuDate(visibleProfile.createdAt) : '';
 
     const refreshAfterChange = async () => {
         await router.invalidate();
@@ -139,7 +169,7 @@ export function ProfileDialog({ open, onOpenChange, user }: ProfileDialogProps) 
     const handleName = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         const nextName = name.trim();
-        if (!nextName || nextName === visibleProfile.name || nameBusy) return;
+        if (!visibleProfile || !nextName || nextName === visibleProfile.name || nameBusy) return;
 
         setNameBusy(true);
         try {
@@ -192,7 +222,7 @@ export function ProfileDialog({ open, onOpenChange, user }: ProfileDialogProps) 
                                 Профиль
                             </DialogPrimitive.Title>
                             <DialogPrimitive.Description className="mt-1 text-sm text-muted-foreground">
-                                Ваши данные
+                                {isOwnProfile ? 'Ваши данные' : 'Данные пользователя'}
                             </DialogPrimitive.Description>
                         </div>
                         <DialogPrimitive.Close asChild>
@@ -210,15 +240,21 @@ export function ProfileDialog({ open, onOpenChange, user }: ProfileDialogProps) 
                                     Загрузка профиля...
                                 </span>
                             </div>
+                        ) : !visibleProfile ? (
+                            <div className="grid min-h-60 place-items-center text-sm text-muted-foreground">
+                                {profileError ?? 'Профиль недоступен'}
+                            </div>
                         ) : (
                             <div className="flex flex-col gap-5">
                                 <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
                                     <button
                                         type="button"
-                                        onClick={() => fileRef.current?.click()}
-                                        disabled={avatarBusy}
+                                        onClick={() => {
+                                            if (isOwnProfile) fileRef.current?.click();
+                                        }}
+                                        disabled={!isOwnProfile || avatarBusy}
                                         className="group relative size-24 shrink-0 overflow-hidden rounded-full border-4 border-card bg-card shadow-[0_18px_44px_rgb(0_0_0/0.32)]"
-                                        aria-label="Сменить фото профиля"
+                                        aria-label={isOwnProfile ? 'Сменить фото профиля' : `Фото профиля ${visibleProfile.name}`}
                                     >
                                         {visibleProfile.avatarUrl ? (
                                             <img src={visibleProfile.avatarUrl} alt="" className="size-full object-cover"/>
@@ -227,14 +263,16 @@ export function ProfileDialog({ open, onOpenChange, user }: ProfileDialogProps) 
                                                 {initials(visibleProfile.name)}
                                             </span>
                                         )}
-                                        <span
-                                            className={cn(
-                                                'absolute inset-0 grid place-items-center bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100',
-                                                avatarBusy && 'opacity-100',
-                                            )}
-                                        >
-                                            {avatarBusy ? <Loader2 className="size-5 animate-spin"/> : <ImageUp className="size-5"/>}
-                                        </span>
+                                        {isOwnProfile ? (
+                                            <span
+                                                className={cn(
+                                                    'absolute inset-0 grid place-items-center bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100',
+                                                    avatarBusy && 'opacity-100',
+                                                )}
+                                            >
+                                                {avatarBusy ? <Loader2 className="size-5 animate-spin"/> : <ImageUp className="size-5"/>}
+                                            </span>
+                                        ) : null}
                                     </button>
                                     <input
                                         ref={fileRef}
@@ -254,25 +292,28 @@ export function ProfileDialog({ open, onOpenChange, user }: ProfileDialogProps) 
                                             <CalendarDays className="size-3.5"/>
                                             На сайте с {joined}
                                         </p>
-                                        <p className="mt-1 text-[11px] text-muted-foreground/75">
-                                            Нажмите на фото, чтобы заменить. JPEG, PNG или WebP до 5 МБ.
-                                        </p>
+                                        {isOwnProfile ? (
+                                            <p className="mt-1 text-[11px] text-muted-foreground/75">
+                                                Нажмите на фото, чтобы заменить. JPEG, PNG или WebP до 5 МБ.
+                                            </p>
+                                        ) : null}
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                                     <StatTile icon={<Film/>} value={visibleProfile.moviesAdded} label="Добавлено"/>
                                     <StatTile icon={<Star/>} value={visibleProfile.ratingsCount} label="Оценок"/>
-                                    <StatTile icon={<MessageSquare/>} value={visibleProfile.commentsCount} label="Комментариев"/>
+                                    <StatTile icon={<MessageSquare/>} value={visibleProfile.commentsCount} label="Рецензий"/>
                                     <StatTile icon={<Bookmark/>} value={visibleProfile.watchlistCount} label="К просмотру"/>
                                     <StatTile icon={<Check/>} value={visibleProfile.watchedCount} label="Просмотрено"/>
                                 </div>
 
-                                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                                {isOwnProfile ? (
+                                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                                     <form onSubmit={handleName} className="flex flex-col gap-3 rounded-md border border-card-border bg-card p-4">
                                         <div>
                                             <h3 className="text-sm font-semibold">Данные профиля</h3>
-                                            <p className="mt-1 text-xs text-muted-foreground">Имя отображается в комментариях и карточках.</p>
+                                            <p className="mt-1 text-xs text-muted-foreground">Имя отображается в рецензиях и карточках.</p>
                                         </div>
                                         <div className="flex flex-col gap-2">
                                             <Label htmlFor="profile-dialog-name">Имя</Label>
@@ -341,7 +382,8 @@ export function ProfileDialog({ open, onOpenChange, user }: ProfileDialogProps) 
                                             Изменить пароль
                                         </Button>
                                     </form>
-                                </div>
+                                    </div>
+                                ) : null}
                             </div>
                         )}
                     </div>

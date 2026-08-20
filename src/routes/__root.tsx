@@ -56,6 +56,7 @@ function RootLayout() {
     const appToolbar = useAppToolbar();
     const [ isMobileMenuOpen, setIsMobileMenuOpen ] = useState(false);
     const [ isProfileOpen, setIsProfileOpen ] = useState(false);
+    const [ profileUserId, setProfileUserId ] = useState<string | null>(null);
     const [ isThemeOpen, setIsThemeOpen ] = useState(false);
     const isChatRoute = pathname.startsWith('/chat');
     const searchParams = new URLSearchParams(searchStr);
@@ -68,6 +69,17 @@ function RootLayout() {
     useEffect(() => {
         applyTheme(getStoredTheme(user?.id ?? null));
     }, [ user?.id ]);
+
+    useEffect(() => {
+        const handleOpenProfile = (event: Event) => {
+            const userId = (event as CustomEvent<{ userId?: unknown }>).detail?.userId;
+            if (typeof userId !== 'string' || !userId) return;
+            setProfileUserId(userId);
+            setIsProfileOpen(true);
+        };
+        window.addEventListener('ay-movies:open-profile', handleOpenProfile);
+        return () => window.removeEventListener('ay-movies:open-profile', handleOpenProfile);
+    }, []);
 
     // Закрываем мобильное меню при переходе на другую страницу
     useEffect(() => {
@@ -86,6 +98,7 @@ function RootLayout() {
                     user={user}
                     onOpenProfile={() => {
                         setIsMobileMenuOpen(false);
+                        setProfileUserId(null);
                         setIsProfileOpen(true);
                     }}
                     onOpenTheme={() => {
@@ -138,7 +151,10 @@ function RootLayout() {
             <aside className="sticky top-0 hidden h-svh w-60 shrink-0 border-r border-border bg-background shadow-[10px_0_30px_rgb(0_0_0/0.18)] md:block">
                 <Sidebar
                     user={user}
-                    onOpenProfile={() => setIsProfileOpen(true)}
+                    onOpenProfile={() => {
+                        setProfileUserId(null);
+                        setIsProfileOpen(true);
+                    }}
                     onOpenTheme={() => setIsThemeOpen(true)}
                 />
             </aside>
@@ -208,7 +224,15 @@ function RootLayout() {
                     </footer>
                 ) : null}
             </div>
-            <ProfileDialog open={isProfileOpen} onOpenChange={setIsProfileOpen} user={user}/>
+            <ProfileDialog
+                open={isProfileOpen}
+                onOpenChange={(open) => {
+                    setIsProfileOpen(open);
+                    if (!open) setProfileUserId(null);
+                }}
+                user={user}
+                profileUserId={profileUserId}
+            />
             <ThemeDialog open={isThemeOpen} onOpenChange={setIsThemeOpen} userId={user?.id ?? null}/>
             <Toaster theme="dark" position="bottom-right"/>
         </div>
