@@ -5,13 +5,18 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { PageTitle } from '@/components/AppTitle';
-import { LookupCandidates } from '@/components/movies/LookupCandidates';
+import {
+    LookupCandidates,
+    lookupCandidateKey,
+    type LookupCandidate,
+} from '@/components/movies/LookupCandidates';
 import { MovieForm } from '@/components/movies/MovieForm';
 import { MovieFormFooter } from '@/components/movies/MovieFormFooter';
 import type { MovieFormFields } from '@/lib/movie-data';
 import { getMovie, updateMovie } from '@/server/movies';
-import { lookupMovieCandidates, type MovieLookupCandidate } from '@/server/movie-lookup';
+import { loadMovieLookupDetails, lookupMovieCandidates, type MovieLookupCandidate } from '@/server/movie-lookup';
 import { normalizeGenreOptions } from '@/lib/genre-groups';
+import type { MovieLookupDetails } from '@/lib/movie-lookup-types';
 
 function movieToFormDefaults(movie: Awaited<ReturnType<typeof getMovie>>): Partial<MovieFormFields> {
     if (!movie) return {};
@@ -30,13 +35,18 @@ function movieToFormDefaults(movie: Awaited<ReturnType<typeof getMovie>>): Parti
         durationMin: movie.durationMin ?? '',
         seasonsCount: movie.seasonsCount ?? '',
         episodesPerSeason: movie.episodesPerSeason.join(', '),
+        metadataProvider: movie.metadataProvider,
+        metadataExternalId: movie.metadataExternalId,
+        seriesSeasons: movie.seriesSeasons,
     };
 }
 
 function mergeLookupDefaults(
     current: Partial<MovieFormFields>,
-    lookup: MovieLookupCandidate,
+    lookup: LookupCandidate,
 ): Partial<MovieFormFields> {
+    const hasSnapshot = hasDetailedSeasons(lookup) && lookup.seasons.length > 0;
+
     return {
         ...current,
         kind: lookup.kind ?? current.kind,
@@ -51,11 +61,26 @@ function mergeLookupDefaults(
         genres: lookup.genres?.length ? normalizeGenreOptions(lookup.genres) : current.genres,
         starring: lookup.starring?.length ? lookup.starring.join(', ') : current.starring,
         durationMin: lookup.durationMin ?? current.durationMin,
-        seasonsCount: lookup.seasonsCount ?? current.seasonsCount,
-        episodesPerSeason: lookup.episodesPerSeason?.length
+        seasonsCount: hasSnapshot ? lookup.seasonsCount ?? current.seasonsCount : current.seasonsCount,
+        episodesPerSeason: hasSnapshot && lookup.episodesPerSeason?.length
             ? lookup.episodesPerSeason.join(', ')
             : current.episodesPerSeason,
+        metadataProvider: lookup.provider,
+        metadataExternalId: lookup.externalId ?? null,
+        seriesSeasons: hasSnapshot ? lookup.seasons : current.seriesSeasons,
     };
+}
+
+function canLoadCandidateDetails(candidate: MovieLookupCandidate) {
+    return Boolean(
+        candidate.externalId
+        && !/^Q\d+$/i.test(candidate.externalId)
+        && (candidate.provider === 'kinopoisk-dev' || candidate.provider === 'kinopoisk-unofficial'),
+    );
+}
+
+function hasDetailedSeasons(candidate: LookupCandidate): candidate is MovieLookupDetails {
+    return 'seasons' in candidate;
 }
 
 export const Route = createFileRoute('/movies/$movieId_/edit')({
@@ -84,7 +109,8 @@ function EditMoviePage() {
     const [ formVersion, setFormVersion ] = useState(0);
     const [ isRefreshing, setIsRefreshing ] = useState(false);
     const [ isSubmitting, setIsSubmitting ] = useState(false);
-    const [ lookupCandidates, setLookupCandidates ] = useState<MovieLookupCandidate[]>([]);
+    const [ lookupCandidates, setLookupCandidates ] = useState<LookupCandidate[]>([]);
+    const [ loadingCandidateKey, setLoadingCandidateKey ] = useState<string | null>(null);
 
     const handleRefreshMetadata = async () => {
         const title = String(formDefaults.title || movie.title).trim();
@@ -92,6 +118,20 @@ function EditMoviePage() {
 
         setIsRefreshing(true);
         try {
+            if (movie.metadataProvider && movie.metadataExternalId) {
+                const detailedResult = await loadMovieLookupDetails({
+                    data: {
+                        provider: movie.metadataProvider,
+                        externalId: movie.metadataExternalId,
+                    },
+                });
+                if (detailedResult.ok) {
+                    setLookupCandidates([ detailedResult.movie ]);
+                    return;
+                }
+                toast.warning('Не удалось обновить сохранённый источник. Выполняю поиск по названию.');
+            }
+
             const result = await lookupMovieCandidates({ data: { title, kind: formDefaults.kind } });
             if (!result.ok) {
                 toast.error(result.error);
@@ -103,6 +143,38 @@ function EditMoviePage() {
             toast.error('Не удалось обновить данные');
         } finally {
             setIsRefreshing(false);
+        }
+    };
+
+    const applyLookupCandidate = async (candidate: LookupCandidate) => {
+        const candidateKey = lookupCandidateKey(candidate);
+        setLoadingCandidateKey(candidateKey);
+
+        try {
+            let selectedCandidate = candidate;
+            if (!hasDetailedSeasons(candidate) && canLoadCandidateDetails(candidate)) {
+                const detailedResult = await loadMovieLookupDetails({
+                    data: { provider: candidate.provider, externalId: candidate.externalId! },
+                });
+
+                if (detailedResult.ok && (detailedResult.movie.kind !== 'SERIES' || detailedResult.movie.seasons.length > 0)) {
+                    selectedCandidate = detailedResult.movie;
+                } else if (!detailedResult.ok || candidate.kind === 'SERIES') {
+                    toast.warning('Подробные данные о сериях недоступны. Использованы основные данные.');
+                }
+            }
+
+            setFormDefaults((current) => mergeLookupDefaults(current, selectedCandidate));
+            setLookupCandidates([]);
+            setFormVersion((current) => current + 1);
+            toast.success('Данные подставлены — проверьте перед сохранением');
+        } catch {
+            toast.warning('Подробные данные недоступны. Использованы основные данные.');
+            setFormDefaults((current) => mergeLookupDefaults(current, candidate));
+            setLookupCandidates([]);
+            setFormVersion((current) => current + 1);
+        } finally {
+            setLoadingCandidateKey(null);
         }
     };
 
@@ -142,12 +214,8 @@ function EditMoviePage() {
                 <LookupCandidates
                     candidates={lookupCandidates}
                     onReject={() => setLookupCandidates([])}
-                    onSelect={(candidate) => {
-                        setFormDefaults((current) => mergeLookupDefaults(current, candidate));
-                        setLookupCandidates([]);
-                        setFormVersion((current) => current + 1);
-                        toast.success('Данные подставлены — проверьте перед сохранением');
-                    }}
+                    onSelect={applyLookupCandidate}
+                    loadingCandidateKey={loadingCandidateKey}
                 />
                 <MovieForm
                     key={formVersion}

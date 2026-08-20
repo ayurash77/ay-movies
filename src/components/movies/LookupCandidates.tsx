@@ -1,11 +1,14 @@
-import type { MovieLookupCandidate } from '@/lib/movie-lookup-types';
+import type { MovieLookupCandidate, MovieLookupDetails } from '@/lib/movie-lookup-types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
+export type LookupCandidate = MovieLookupCandidate | MovieLookupDetails;
+
 type LookupCandidatesProps = {
-    candidates: MovieLookupCandidate[];
-    onSelect: (candidate: MovieLookupCandidate) => void;
+    candidates: LookupCandidate[];
+    onSelect: (candidate: LookupCandidate) => void;
     onReject: () => void;
+    loadingCandidateKey?: string | null;
 };
 
 const KIND_LABELS = {
@@ -29,7 +32,16 @@ function formatRating(candidate: MovieLookupCandidate) {
         : null;
 }
 
-export function LookupCandidates({ candidates, onSelect, onReject }: LookupCandidatesProps) {
+export function lookupCandidateKey(candidate: MovieLookupCandidate) {
+    return `${candidate.provider}:${candidate.externalId ?? candidate.title ?? ''}:${candidate.year ?? ''}`;
+}
+
+export function LookupCandidates({
+    candidates,
+    onSelect,
+    onReject,
+    loadingCandidateKey,
+}: LookupCandidatesProps) {
     if (!candidates.length) return null;
 
     return (
@@ -45,6 +57,8 @@ export function LookupCandidates({ candidates, onSelect, onReject }: LookupCandi
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
                 {candidates.map((candidate, index) => {
+                    const candidateKey = lookupCandidateKey(candidate) || String(index);
+                    const isApplyingCandidate = loadingCandidateKey === candidateKey;
                     const series = formatSeries(candidate);
                     const meta = [
                         candidate.kind ? KIND_LABELS[candidate.kind] : null,
@@ -55,7 +69,7 @@ export function LookupCandidates({ candidates, onSelect, onReject }: LookupCandi
                     ].filter(Boolean);
 
                     return (
-                        <Card key={`${candidate.provider}-${candidate.externalId ?? index}`} className="py-3">
+                        <Card key={candidateKey} className="py-3">
                             <CardContent className="flex gap-3 px-3">
                                 <div className="h-28 w-20 shrink-0 overflow-hidden rounded-md bg-muted">
                                     {candidate.posterUrl ? (
@@ -97,8 +111,9 @@ export function LookupCandidates({ candidates, onSelect, onReject }: LookupCandi
                                         size="sm"
                                         className="mt-auto self-start"
                                         onClick={() => onSelect(candidate)}
+                                        disabled={Boolean(loadingCandidateKey)}
                                     >
-                                        Заполнить
+                                        {isApplyingCandidate ? 'Загрузка...' : 'Заполнить'}
                                     </Button>
                                 </div>
                             </CardContent>

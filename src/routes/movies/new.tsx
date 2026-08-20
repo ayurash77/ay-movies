@@ -8,13 +8,18 @@ import { Button } from '@/components/ui/button';
 import { PageTitle } from '@/components/AppTitle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { LookupCandidates } from '@/components/movies/LookupCandidates';
+import {
+    LookupCandidates,
+    lookupCandidateKey,
+    type LookupCandidate,
+} from '@/components/movies/LookupCandidates';
 import { MovieForm } from '@/components/movies/MovieForm';
 import { MovieFormFooter } from '@/components/movies/MovieFormFooter';
-import { lookupMovieCandidates, type MovieLookupCandidate } from '@/server/movie-lookup';
+import { loadMovieLookupDetails, lookupMovieCandidates, type MovieLookupCandidate } from '@/server/movie-lookup';
 import { createMovie } from '@/server/movies';
 import { normalizeGenreOptions } from '@/lib/genre-groups';
 import { movieKindOptions, type MovieFormFields } from '@/lib/movie-data';
+import type { MovieLookupDetails } from '@/lib/movie-lookup-types';
 
 export const Route = createFileRoute('/movies/new')({
     validateSearch: z.object({
@@ -36,7 +41,7 @@ export const Route = createFileRoute('/movies/new')({
 });
 
 function candidateToFormDefaults(
-    candidate: MovieLookupCandidate,
+    candidate: LookupCandidate,
     fallbackTitle: string,
 ): Partial<MovieFormFields> {
     return {
@@ -52,7 +57,22 @@ function candidateToFormDefaults(
         seasonsCount: candidate.seasonsCount ?? '',
         episodesPerSeason: candidate.episodesPerSeason?.join(', ') ?? '',
         posterUrl: candidate.posterUrl ?? '',
+        metadataProvider: candidate.provider,
+        metadataExternalId: candidate.externalId ?? null,
+        seriesSeasons: 'seasons' in candidate ? candidate.seasons : undefined,
     };
+}
+
+function canLoadCandidateDetails(candidate: MovieLookupCandidate) {
+    return Boolean(
+        candidate.externalId
+        && !/^Q\d+$/i.test(candidate.externalId)
+        && (candidate.provider === 'kinopoisk-dev' || candidate.provider === 'kinopoisk-unofficial'),
+    );
+}
+
+function hasDetailedSeasons(candidate: LookupCandidate): candidate is MovieLookupDetails {
+    return 'seasons' in candidate;
 }
 
 function NewMoviePage() {
@@ -63,7 +83,8 @@ function NewMoviePage() {
     const [ isLookingUp, setIsLookingUp ] = useState(false);
     const [ isSubmitting, setIsSubmitting ] = useState(false);
     const [ lookupDefaults, setLookupDefaults ] = useState<Partial<MovieFormFields>>({ kind: kind ?? 'MOVIE' });
-    const [ lookupCandidates, setLookupCandidates ] = useState<MovieLookupCandidate[]>([]);
+    const [ lookupCandidates, setLookupCandidates ] = useState<LookupCandidate[]>([]);
+    const [ loadingCandidateKey, setLoadingCandidateKey ] = useState<string | null>(null);
 
     useEffect(() => {
         setLookupDefaults((current) => ({ ...current, kind: kind ?? current.kind ?? 'MOVIE' }));
@@ -87,6 +108,36 @@ function NewMoviePage() {
             toast.error('Не удалось получить данные');
         } finally {
             setIsLookingUp(false);
+        }
+    };
+
+    const applyLookupCandidate = async (candidate: LookupCandidate) => {
+        const candidateKey = lookupCandidateKey(candidate);
+        setLoadingCandidateKey(candidateKey);
+
+        try {
+            let selectedCandidate = candidate;
+            if (!hasDetailedSeasons(candidate) && canLoadCandidateDetails(candidate)) {
+                const result = await loadMovieLookupDetails({
+                    data: { provider: candidate.provider, externalId: candidate.externalId! },
+                });
+
+                if (result.ok && (result.movie.kind !== 'SERIES' || result.movie.seasons.length > 0)) {
+                    selectedCandidate = result.movie;
+                } else if (!result.ok || candidate.kind === 'SERIES') {
+                    toast.warning('Подробные данные о сериях недоступны. Использованы основные данные.');
+                }
+            }
+
+            setLookupDefaults(candidateToFormDefaults(selectedCandidate, lookupTitle.trim()));
+            setLookupCandidates([]);
+            toast.success('Данные подставлены — проверьте перед сохранением');
+        } catch {
+            toast.warning('Подробные данные недоступны. Использованы основные данные.');
+            setLookupDefaults(candidateToFormDefaults(candidate, lookupTitle.trim()));
+            setLookupCandidates([]);
+        } finally {
+            setLoadingCandidateKey(null);
         }
     };
 
@@ -136,11 +187,8 @@ function NewMoviePage() {
             <LookupCandidates
                 candidates={lookupCandidates}
                 onReject={() => setLookupCandidates([])}
-                onSelect={(candidate) => {
-                    setLookupDefaults(candidateToFormDefaults(candidate, lookupTitle.trim()));
-                    setLookupCandidates([]);
-                    toast.success('Данные подставлены — проверьте перед сохранением');
-                }}
+                onSelect={applyLookupCandidate}
+                loadingCandidateKey={loadingCandidateKey}
             />
 
             <Card>

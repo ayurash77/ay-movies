@@ -180,10 +180,11 @@ export function MovieForm({
                 durationMin: form.get('durationMin')
                     ? Number(form.get('durationMin'))
                     : '',
-                seasonsCount: form.get('seasonsCount')
-                    ? Number(form.get('seasonsCount'))
-                    : '',
-                episodesPerSeason: String(form.get('episodesPerSeason') ?? ''),
+                seasonsCount: defaults?.seasonsCount,
+                episodesPerSeason: defaults?.episodesPerSeason,
+                metadataProvider: defaults?.metadataProvider,
+                metadataExternalId: defaults?.metadataExternalId,
+                seriesSeasons: defaults?.seriesSeasons,
             });
         } catch {
             toast.error('Проверьте правильность заполнения полей');
@@ -256,30 +257,6 @@ export function MovieForm({
                     defaultValue={defaults?.durationMin ?? ''}
                 />
             </FieldRow>
-
-            {kind === 'SERIES' ? (
-                <>
-                    <FieldRow htmlFor="seasonsCount" label="Сезонов">
-                        <Input
-                            id="seasonsCount"
-                            name="seasonsCount"
-                            type="number"
-                            min={1}
-                            max={100}
-                            defaultValue={defaults?.seasonsCount ?? ''}
-                        />
-                    </FieldRow>
-                    <FieldRow htmlFor="episodesPerSeason" label="Серии">
-                        <Input
-                            id="episodesPerSeason"
-                            name="episodesPerSeason"
-                            placeholder="8, 10, 12"
-                            maxLength={500}
-                            defaultValue={defaults?.episodesPerSeason ?? ''}
-                        />
-                    </FieldRow>
-                </>
-            ) : null}
 
             <FieldRow htmlFor="starring" label="В ролях">
                 <Input

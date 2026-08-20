@@ -15,6 +15,9 @@ test('lookup candidates render selectable source cards', () => {
     assert.match(source, /Заполнить/);
     assert.match(source, /Не подходит/);
     assert.match(source, /episodesPerSeason/);
+    assert.match(source, /loadingCandidateKey/);
+    assert.match(source, /disabled=\{Boolean\(loadingCandidateKey\)\}/);
+    assert.match(source, /Загрузка/);
 });
 
 test('new movie page shows candidates before applying lookup data', () => {
@@ -24,6 +27,11 @@ test('new movie page shows candidates before applying lookup data', () => {
     assert.match(source, /LookupCandidates/);
     assert.match(source, /setLookupCandidates/);
     assert.match(source, /candidateToFormDefaults/);
+    assert.match(source, /loadMovieLookupDetails/);
+    assert.match(source, /applyLookupCandidate/);
+    assert.match(source, /metadataProvider/);
+    assert.match(source, /metadataExternalId/);
+    assert.match(source, /seriesSeasons/);
     assert.doesNotMatch(source, /toast\.success\('Форма заполнена/);
 });
 
@@ -34,7 +42,24 @@ test('movie edit page refresh shows candidates before merge', () => {
     assert.match(source, /LookupCandidates/);
     assert.match(source, /setLookupCandidates/);
     assert.match(source, /mergeLookupDefaults/);
+    assert.match(source, /loadMovieLookupDetails/);
+    assert.match(source, /applyLookupCandidate/);
+    assert.match(source, /movie\.metadataProvider/);
+    assert.match(source, /movie\.metadataExternalId/);
+    assert.match(source, /seriesSeasons/);
     assert.doesNotMatch(source, /toast\.success\('Данные обновлены'\)/);
+});
+
+test('movie form keeps imported series data without manual season inputs', () => {
+    const form = read('src/components/movies/MovieForm.tsx');
+
+    assert.doesNotMatch(form, /name="seasonsCount"/);
+    assert.doesNotMatch(form, /name="episodesPerSeason"/);
+    assert.match(form, /seasonsCount: defaults\?\.seasonsCount/);
+    assert.match(form, /episodesPerSeason: defaults\?\.episodesPerSeason/);
+    assert.match(form, /metadataProvider: defaults\?\.metadataProvider/);
+    assert.match(form, /metadataExternalId: defaults\?\.metadataExternalId/);
+    assert.match(form, /seriesSeasons: defaults\?\.seriesSeasons/);
 });
 
 test('movie form supports external sticky footer actions', () => {
