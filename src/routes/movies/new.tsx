@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { LookupCandidates } from '@/components/movies/LookupCandidates';
 import { MovieForm } from '@/components/movies/MovieForm';
+import { MovieFormFooter } from '@/components/movies/MovieFormFooter';
 import { lookupMovieCandidates, type MovieLookupCandidate } from '@/server/movie-lookup';
 import { createMovie } from '@/server/movies';
 import { normalizeGenreOptions } from '@/lib/genre-groups';
@@ -57,8 +58,10 @@ function candidateToFormDefaults(
 function NewMoviePage() {
     const navigate = useNavigate();
     const { kind } = Route.useSearch();
+    const formId = 'new-movie-form';
     const [ lookupTitle, setLookupTitle ] = useState('');
     const [ isLookingUp, setIsLookingUp ] = useState(false);
+    const [ isSubmitting, setIsSubmitting ] = useState(false);
     const [ lookupDefaults, setLookupDefaults ] = useState<Partial<MovieFormFields>>({ kind: kind ?? 'MOVIE' });
     const [ lookupCandidates, setLookupCandidates ] = useState<MovieLookupCandidate[]>([]);
 
@@ -87,8 +90,16 @@ function NewMoviePage() {
         }
     };
 
+    const handleCancel = () => {
+        if (window.history.length > 1) {
+            window.history.back();
+            return;
+        }
+        navigate({ to: '/' });
+    };
+
     return (
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 pb-28">
             <PageTitle title="Добавить фильм"/>
             <Card className="border-primary/30">
                 <CardHeader>
@@ -136,6 +147,9 @@ function NewMoviePage() {
                 <CardContent>
                     <MovieForm
                         key={JSON.stringify(lookupDefaults)}
+                        formId={formId}
+                        hideSubmitButton
+                        onSubmittingChange={setIsSubmitting}
                         defaults={lookupDefaults}
                         submitLabel="Добавить фильм"
                         onSubmit={async (fields) => {
@@ -152,6 +166,12 @@ function NewMoviePage() {
                     />
                 </CardContent>
             </Card>
+            <MovieFormFooter
+                formId={formId}
+                submitLabel="Добавить фильм"
+                isSubmitting={isSubmitting}
+                onCancel={handleCancel}
+            />
         </div>
     );
 }

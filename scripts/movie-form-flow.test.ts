@@ -36,3 +36,19 @@ test('movie edit page refresh shows candidates before merge', () => {
     assert.match(source, /mergeLookupDefaults/);
     assert.doesNotMatch(source, /toast\.success\('Данные обновлены'\)/);
 });
+
+test('movie form supports external sticky footer actions', () => {
+    const form = read('src/components/movies/MovieForm.tsx');
+    const footer = read('src/components/movies/MovieFormFooter.tsx');
+    const newRoute = read('src/routes/movies/new.tsx');
+    const editRoute = read('src/routes/movies/$movieId_.edit.tsx');
+
+    assert.match(form, /formId\?: string/);
+    assert.match(form, /hideSubmitButton\?: boolean/);
+    assert.match(form, /onSubmittingChange/);
+    assert.match(footer, /fixed bottom-0/);
+    assert.match(footer, /Отмена/);
+    assert.match(footer, /form=\{formId\}/);
+    assert.match(newRoute, /MovieFormFooter/);
+    assert.match(editRoute, /MovieFormFooter/);
+});

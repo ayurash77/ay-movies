@@ -14,6 +14,9 @@ type MovieFormProps = {
     defaults?: Partial<MovieFormFields>;
     submitLabel: string;
     onSubmit: (fields: MovieFormFields) => Promise<void>;
+    formId?: string;
+    hideSubmitButton?: boolean;
+    onSubmittingChange?: (isSubmitting: boolean) => void;
 };
 
 type FieldRowProps = {
@@ -109,7 +112,14 @@ function UrlListField({ id, label, links, setLinks, addLabel }: UrlListFieldProp
     );
 }
 
-export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
+export function MovieForm({
+    defaults,
+    submitLabel,
+    onSubmit,
+    formId,
+    hideSubmitButton,
+    onSubmittingChange,
+}: MovieFormProps) {
     const [ isSubmitting, setIsSubmitting ] = useState(false);
     const [ kind, setKind ] = useState<NonNullable<MovieFormFields['kind']>>(defaults?.kind ?? 'MOVIE');
     const [ trailerUrls, setTrailerUrls ] = useState<string[]>(
@@ -123,6 +133,11 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
     );
     const posterPreviewUrl = defaults?.posterUrl?.trim();
 
+    const setSubmitting = (value: boolean) => {
+        setIsSubmitting(value);
+        onSubmittingChange?.(value);
+    };
+
     const toggleGenre = (genre: GenreOption) => {
         setSelectedGenres((current) =>
             current.includes(genre)
@@ -135,7 +150,7 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
 
-        setIsSubmitting(true);
+        setSubmitting(true);
         try {
             let posterUrl = String(form.get('posterUrl') ?? '');
             const posterFile = form.get('posterFile');
@@ -173,12 +188,12 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
         } catch {
             toast.error('Проверьте правильность заполнения полей');
         } finally {
-            setIsSubmitting(false);
+            setSubmitting(false);
         }
     };
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form id={formId} onSubmit={handleSubmit} className="flex flex-col gap-4">
             <FieldRow htmlFor="kind" label="Тип" required>
                 <select
                     id="kind"
@@ -354,9 +369,11 @@ export function MovieForm({ defaults, submitLabel, onSubmit }: MovieFormProps) {
                 </div>
             ) : null}
 
-            <Button type="submit" disabled={isSubmitting} className="self-end">
-                {isSubmitting ? 'Сохранение…' : submitLabel}
-            </Button>
+            {hideSubmitButton ? null : (
+                <Button type="submit" disabled={isSubmitting} className="self-end">
+                    {isSubmitting ? 'Сохранение…' : submitLabel}
+                </Button>
+            )}
         </form>
     );
 }

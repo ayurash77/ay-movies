@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { PageTitle } from '@/components/AppTitle';
 import { LookupCandidates } from '@/components/movies/LookupCandidates';
 import { MovieForm } from '@/components/movies/MovieForm';
+import { MovieFormFooter } from '@/components/movies/MovieFormFooter';
 import type { MovieFormFields } from '@/lib/movie-data';
 import { getMovie, updateMovie } from '@/server/movies';
 import { lookupMovieCandidates, type MovieLookupCandidate } from '@/server/movie-lookup';
@@ -78,9 +79,11 @@ function EditMoviePage() {
     const movie = Route.useLoaderData();
     const navigate = useNavigate();
     const pageTitle = `Редактировать: ${movie.title}`;
+    const formId = 'edit-movie-form';
     const [ formDefaults, setFormDefaults ] = useState<Partial<MovieFormFields>>(() => movieToFormDefaults(movie));
     const [ formVersion, setFormVersion ] = useState(0);
     const [ isRefreshing, setIsRefreshing ] = useState(false);
+    const [ isSubmitting, setIsSubmitting ] = useState(false);
     const [ lookupCandidates, setLookupCandidates ] = useState<MovieLookupCandidate[]>([]);
 
     const handleRefreshMetadata = async () => {
@@ -123,7 +126,7 @@ function EditMoviePage() {
     return (
         <>
             <PageTitle title={pageTitle}/>
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 pb-28">
                 <div className="flex justify-end">
                     <Button
                         type="button"
@@ -148,6 +151,9 @@ function EditMoviePage() {
                 />
                 <MovieForm
                     key={formVersion}
+                    formId={formId}
+                    hideSubmitButton
+                    onSubmittingChange={setIsSubmitting}
                     submitLabel="Сохранить"
                     defaults={formDefaults}
                     onSubmit={async (fields) => {
@@ -162,6 +168,12 @@ function EditMoviePage() {
                             }
                         }
                     }}
+                />
+                <MovieFormFooter
+                    formId={formId}
+                    submitLabel="Сохранить"
+                    isSubmitting={isSubmitting}
+                    onCancel={() => navigate({ to: '/movies/$movieId', params: { movieId: movie.id } })}
                 />
             </div>
         </>
