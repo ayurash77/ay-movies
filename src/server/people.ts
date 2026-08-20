@@ -117,6 +117,25 @@ function compactProfile(row: PersonProfileRow, filmography: PersonFilmographyEnt
     return parsed.success ? parsed.data : null;
 }
 
+function recoveryProfile(row: PersonProfileRow): PersonProfile | null {
+    const parsed = personProfileSchema.safeParse({
+        provider: row.provider,
+        externalId: row.externalId,
+        name: row.name,
+        originalName: null,
+        photoUrl: null,
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [],
+        facts: [],
+        filmography: [],
+    });
+    return parsed.success ? parsed.data : null;
+}
+
 function mergePartialFilmography(
     cached: PersonFilmographyEntry[],
     fresh: PersonFilmographyEntry[],
@@ -209,11 +228,12 @@ export async function resolvePersonProfile({
 
     const parsedFilmography = personFilmographySchema.safeParse(row.filmography);
     const compact = compactProfile(row, parsedFilmography.success ? parsedFilmography.data : []);
-    if (!compact) {
+    const profileBase = compact ?? recoveryProfile(row);
+    if (!profileBase) {
         return { ok: false as const, error: 'Профиль персоны временно недоступен' };
     }
 
-    const cached = row.profileUpdatedAt && parsedFilmography.success
+    const cached = compact && row.profileUpdatedAt && parsedFilmography.success
         ? { profile: compact, updatedAt: row.profileUpdatedAt }
         : null;
     const snapshot = await resolvePersonSnapshot({
@@ -223,7 +243,7 @@ export async function resolvePersonProfile({
         loadFresh: async () => {
             const fresh = await loadFresh(row.provider, row.externalId);
             if (!fresh) return null;
-            const profile = mergeFreshProfile(compact, fresh.profile, fresh.complete);
+            const profile = mergeFreshProfile(profileBase, fresh.profile, fresh.complete);
             return profile ? { profile, complete: fresh.complete } : null;
         },
     });

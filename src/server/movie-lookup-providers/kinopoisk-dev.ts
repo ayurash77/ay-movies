@@ -109,19 +109,26 @@ type KinopoiskSeasonResponse = {
 
 const DEFAULT_BASE_URL = 'https://api.kinopoisk.dev';
 
-const rawSummaryTextSchema = z.string().trim().max(300).nullish();
+const rawSummaryIdSchema = z.union([
+    z.number().int().positive().refine(Number.isSafeInteger),
+    z.string()
+        .max(100)
+        .regex(/^[1-9]\d*$/)
+        .refine((value) => Number.isSafeInteger(Number(value))),
+]);
+const rawSummaryTextSchema = z.string().max(300).nullish();
 const rawSummaryRatingSchema = z.number().finite().min(0).max(10).nullish();
 const rawSummaryUrlSchema = z.string()
-    .trim()
     .max(PERSON_PROFILE_LIMITS.maxUrlLength)
     .url()
     .refine(isHttpUrl)
     .nullish();
 const rawMovieSummarySchema = z.object({
+    id: rawSummaryIdSchema,
     name: rawSummaryTextSchema,
     alternativeName: rawSummaryTextSchema,
     enName: rawSummaryTextSchema,
-    type: z.string().trim().min(1).max(100).nullish(),
+    type: z.string().min(1).max(100).refine((value) => /\S/u.test(value)).nullish(),
     year: z.number().int().min(1800).max(2200).nullish(),
     poster: z.object({
         previewUrl: rawSummaryUrlSchema,
@@ -131,7 +138,10 @@ const rawMovieSummarySchema = z.object({
         kp: rawSummaryRatingSchema,
         imdb: rawSummaryRatingSchema,
     }).nullish(),
-});
+}).refine(
+    (movie) => [ movie.name, movie.alternativeName, movie.enName ]
+        .some((value) => typeof value === 'string' && /\S/u.test(value)),
+);
 
 function text(value: unknown) {
     return typeof value === 'string' ? value.trim() : '';
@@ -182,8 +192,7 @@ function validPersonPayload(value: unknown): (Record<string, unknown> & { movies
 
 function movieSummaryShape(value: unknown) {
     const data = record(value);
-    const id = data ? externalId(data.id) : null;
-    return Boolean(id && rawMovieSummarySchema.safeParse(data).success);
+    return Boolean(data && rawMovieSummarySchema.safeParse(data).success);
 }
 
 function normalize(value: string) {

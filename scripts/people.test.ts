@@ -446,6 +446,9 @@ test('person loader ignores malformed enrichment overrides and keeps base title'
 });
 
 const malformedEnrichmentSummaries = [
+    [ 'whitespace-padded raw ID', { id: ' 100 ' } ],
+    [ 'raw name over limit before trim', { name: ` ${'x'.repeat(300)}` } ],
+    [ 'empty titles', { name: ' ', alternativeName: '', enName: null } ],
     [ 'fractional year', { year: 2020.5 } ],
     [ 'out-of-range year', { year: 2201 } ],
     [ 'overlong type', { type: 'movie'.repeat(21) } ],
@@ -814,4 +817,84 @@ test('failed first refresh leaves compact person untouched and returns unavailab
     assert.deepEqual(calls.updates, []);
     assert.equal(compactPerson.name, 'Компактное имя');
     assert.equal(compactPerson.photoUrl, 'https://example.com/compact.jpg');
+});
+
+test('provider refresh recovers a profile with malformed persisted fields', async () => {
+    const malformedPerson = {
+        id: 'person-local-42',
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: 'Компактное имя',
+        originalName: 'Compact Name',
+        photoUrl: 'not-a-url',
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [ 'actor' ],
+        facts: [],
+        filmography: cachedProfile.filmography,
+        profileUpdatedAt: new Date('2026-08-19T12:00:00.000Z'),
+    };
+    const { calls, store } = createStore(malformedPerson);
+    let loads = 0;
+
+    const result = await resolvePersonProfile({
+        personId: 'person-local-42',
+        store,
+        now: NOW,
+        loadFresh: async () => {
+            loads += 1;
+            return { profile: cachedProfile, complete: true };
+        },
+    });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(loads, 1);
+    assert.equal(result.source, 'provider');
+    assert.equal(result.person.photoUrl, cachedProfile.photoUrl);
+    assert.equal(calls.updates.length, 1);
+    assert.equal(malformedPerson.photoUrl, cachedProfile.photoUrl);
+    assert.equal(malformedPerson.profileUpdatedAt, NOW);
+});
+
+test('failed recovery does not return malformed persisted profile', async () => {
+    const malformedPerson = {
+        id: 'person-local-42',
+        provider: 'kinopoisk-dev',
+        externalId: '42',
+        name: 'Компактное имя',
+        originalName: null,
+        photoUrl: 'not-a-url',
+        sex: null,
+        growthCm: null,
+        birthDate: null,
+        deathDate: null,
+        birthPlace: [],
+        professions: [],
+        facts: [],
+        filmography: cachedProfile.filmography,
+        profileUpdatedAt: new Date('2026-08-19T12:00:00.000Z'),
+    };
+    const { calls, store } = createStore(malformedPerson);
+    let loads = 0;
+
+    const result = await resolvePersonProfile({
+        personId: 'person-local-42',
+        store,
+        now: NOW,
+        loadFresh: async () => {
+            loads += 1;
+            return null;
+        },
+    });
+
+    assert.equal(loads, 1);
+    assert.deepEqual(result, {
+        ok: false,
+        error: 'Профиль персоны временно недоступен',
+    });
+    assert.deepEqual(calls.updates, []);
 });
