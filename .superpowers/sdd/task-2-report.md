@@ -25,7 +25,10 @@ DONE
 ## Команды и результаты
 
 - `pnpm test:movie-detail-rich` — PASS, 18/18.
-- `pnpm test:lookup` — PASS, 32/32.
+- `pnpm test:lookup` — при первичной проверке PASS, 32/32; в финальной
+  проверке после коммитов FAIL, 33/34, в несвязанном тесте
+  `kinopoisk detail enriches cast roles in batches while preserving cast order`
+  (`scripts/movie-lookup.test.ts:338`, фактически 0 вызовов вместо 2).
 - `git diff --check` — PASS, ошибок whitespace нет.
 - Self-review diff — лишних изменений не обнаружено; изменены только два
   целевых файла до добавления этого отчета.
@@ -37,4 +40,5 @@ DONE
 
 ## Concerns
 
-Нет.
+- `pnpm test:lookup` стабильно воспроизводит существующий/несвязанный сбой
+  batch-enrichment cast; файлы из brief для его исправления не изменялись.
