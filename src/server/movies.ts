@@ -738,7 +738,7 @@ export const getMyLists = createServerFn({ method: 'GET' }).handler(
 );
 
 export const rateMovie = createServerFn({ method: 'POST' })
-    .validator(z.object({ movieId: z.string().min(1), value: z.number().int().min(1).max(5) }))
+    .validator(z.object({ movieId: z.string().min(1), value: z.number().int().min(1).max(10).nullable() }))
     .handler(async ({ data }) => {
         const db = await getDb();
         const user = await getAuthUser();
@@ -751,11 +751,17 @@ export const rateMovie = createServerFn({ method: 'POST' })
             return { ok: false as const, error: 'Фильм не найден' };
         }
 
-        await db.rating.upsert({
-            where: { movieId_userId: { movieId: data.movieId, userId: user.id } },
-            create: { movieId: data.movieId, userId: user.id, value: data.value },
-            update: { value: data.value, createdAt: new Date() },
-        });
+        if (data.value === null) {
+            await db.rating.deleteMany({
+                where: { movieId: data.movieId, userId: user.id },
+            });
+        } else {
+            await db.rating.upsert({
+                where: { movieId_userId: { movieId: data.movieId, userId: user.id } },
+                create: { movieId: data.movieId, userId: user.id, value: data.value },
+                update: { value: data.value, createdAt: new Date() },
+            });
+        }
 
         return { ok: true as const };
     });

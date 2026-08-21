@@ -128,7 +128,7 @@ function AboutSection({ movie, reviews, isAuthed, onRate }: {
     movie: MovieDetails;
     reviews: MovieReview[];
     isAuthed: boolean;
-    onRate: (value: number) => void;
+    onRate: (value: number | null) => void;
 }) {
     return (
         <div className="flex flex-col gap-6">
@@ -162,7 +162,7 @@ function SeriesTabs({ movie, reviews, isAuthed, onRate }: {
     movie: MovieDetails;
     reviews: MovieReview[];
     isAuthed: boolean;
-    onRate: (value: number) => void;
+    onRate: (value: number | null) => void;
 }) {
     return (
         <Tabs defaultValue="about" className="gap-5">
@@ -235,13 +235,20 @@ function MoviePage() {
         </Button>
     ) : null, [ movie.canEdit, movie.id ]);
 
-    const handleRate = async (value: number) => {
-        const result = await rateMovie({ data: { movieId: movie.id, value } });
-        if (result.ok) {
-            toast.success(`Ваша оценка: ${value} из 5`);
+    const handleRate = async (value: number | null) => {
+        try {
+            const result = await rateMovie({ data: { movieId: movie.id, value } });
+            if (!result.ok) {
+                toast.error(result.error);
+                return false;
+            }
+
+            toast.success(value == null ? 'Оценка удалена' : `Ваша оценка: ${value} из 10`);
             await router.invalidate();
-        } else {
-            toast.error(result.error);
+            return true;
+        } catch {
+            toast.error('Не удалось сохранить оценку');
+            return false;
         }
     };
 

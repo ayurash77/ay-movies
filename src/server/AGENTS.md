@@ -79,6 +79,8 @@
   физической таблицы `Comment` добавляет миграция
   `20260820200000_movie_people_reviews`. Старые rows остаются neutral reviews;
   внутренние relations/counts по-прежнему называются `comments`.
+- Пользовательский `Rating.value` хранится по шкале 1–10 и защищён DB check;
+  миграция `20260821100000_rating_ten_point` удваивает старые значения 1–5.
 
 ## Focused проверки
 

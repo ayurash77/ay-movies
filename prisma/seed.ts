@@ -150,7 +150,7 @@ async function main() {
     for (const movie of movies) {
         for (const user of users) {
             if (rand() < 0.35) continue; // not everyone rates everything
-            const value = 2 + Math.floor(rand() * 4); // 2..5
+            const value = 4 + Math.floor(rand() * 7); // 4..10
             const age = Math.floor(rand() * 45); // 0..44 days ago
             const createdAt = daysAgo(age);
             await db.rating.create({

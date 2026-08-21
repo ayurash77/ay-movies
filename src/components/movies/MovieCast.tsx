@@ -12,8 +12,8 @@ function CastPortrait({ member }: { member: MovieCastPerson }) {
 
     if (!member.photoUrl || failed) {
         return (
-            <div className="grid aspect-2/3 w-full place-items-center bg-muted">
-                <UserRound className="size-10 text-muted-foreground/55"/>
+            <div className="grid size-12 shrink-0 place-items-center rounded-full bg-muted">
+                <UserRound className="size-5 text-muted-foreground/55"/>
             </div>
         );
     }
@@ -21,10 +21,10 @@ function CastPortrait({ member }: { member: MovieCastPerson }) {
     return (
         <img
             src={member.photoUrl}
-            alt={member.name}
+            alt=""
             loading="lazy"
             onError={() => setFailed(true)}
-            className="aspect-2/3 w-full object-cover"
+            className="size-12 shrink-0 rounded-full object-cover"
         />
     );
 }
@@ -70,21 +70,21 @@ export function MovieCast({ cast, legacyStarring }: { cast: MovieCastPerson[]; l
                     </Button>
                 ) : null}
             </div>
-            <div id={castGridId} className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div id={castGridId} className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {visibleCast.map((member) => (
                     <Link
                         key={member.personId}
                         to="/people/$personId"
                         params={{ personId: member.personId }}
-                        className="group min-w-0 overflow-hidden rounded-md border border-card-border bg-card shadow-[0_10px_24px_rgb(0_0_0/0.18)] transition-colors hover:border-primary/60"
+                        className="group flex min-w-0 items-center gap-2 rounded-md border border-card-border bg-card p-2 shadow-[0_8px_20px_rgb(0_0_0/0.16)] transition-colors hover:border-primary/60"
                     >
                         <CastPortrait member={member}/>
-                        <div className="min-w-0 p-2">
-                            <h3 className="line-clamp-2 text-sm font-semibold leading-tight group-hover:text-primary">
+                        <div className="min-w-0">
+                            <h3 className="truncate text-sm font-semibold leading-tight group-hover:text-primary">
                                 {member.name}
                             </h3>
                             {member.role ? (
-                                <p className="mt-1 line-clamp-2 text-xs leading-tight text-muted-foreground">
+                                <p className="mt-1 truncate text-xs leading-tight text-muted-foreground">
                                     {member.role}
                                 </p>
                             ) : null}

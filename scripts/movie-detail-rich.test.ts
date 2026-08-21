@@ -14,7 +14,7 @@ import {
 import { Window } from 'happy-dom';
 
 import { MovieCast } from '../src/components/movies/MovieCast';
-import { MovieRatings } from '../src/components/movies/MovieRatings';
+import { MovieRatings, RatingPickerPanel } from '../src/components/movies/MovieRatings';
 import { RatingStars } from '../src/components/movies/RatingStars';
 import type { MovieCastPerson } from '../src/lib/movie-data';
 import type { PersonProfile } from '../src/lib/person-data';
@@ -124,7 +124,7 @@ test('ratings render available providers, auth branch, and correct vote declensi
             imdb: null,
             russianCritics: { value: 85, votes: 2 },
         },
-        avgRating: 4.2,
+        avgRating: 8.4,
         ratingCount: 5,
         myRating: null,
         isAuthed: false,
@@ -136,6 +136,8 @@ test('ratings render available providers, auth branch, and correct vote declensi
     assert.doesNotMatch(content, /IMDb/);
     assert.match(content, /Критики/);
     assert.match(content, /AY Movies/);
+    assert.match(content, /8[,.]4/);
+    assert.doesNotMatch(content, /\/ 5/);
     assert.match(content, /1 голос(?![а-я])/);
     assert.match(content, /2 голоса/);
     assert.match(content, /5 голосов/);
@@ -149,30 +151,114 @@ test('ratings grid does not reserve empty provider columns', () => {
     assert.match(source, /repeat\(auto-fit,minmax/);
 });
 
-test('authenticated rating uses large touch targets and handles a star click', async () => {
-    const selected: number[] = [];
+test('authenticated rating exposes a popover trigger', async () => {
     const renderer = await renderWithRouter(createElement(MovieRatings, {
         externalRatings: { kinopoisk: null, imdb: null, russianCritics: null },
-        avgRating: 4.5,
+        avgRating: 9,
         ratingCount: 21,
-        myRating: 3,
+        myRating: null,
         isAuthed: true,
-        onRate: (value) => selected.push(value),
+        onRate: () => undefined,
     }));
-    const fourthStar = renderer.getByRole('radio', { name: '4 из 5' });
 
-    assert.equal(renderer.queryByRole('link', { name: 'Войти и оценить' }), null);
-    assert.match(renderer.container.textContent ?? '', /21 голос(?![а-я])/);
-    assert.match(fourthStar.className, /size-11/);
-    fireEvent.click(fourthStar);
-    assert.deepEqual(selected, [ 4 ]);
+    const trigger = renderer.getByRole('button', { name: 'Оценить' });
+    fireEvent.click(trigger);
+    assert.equal(trigger.getAttribute('aria-expanded'), 'true');
 });
 
-test('read-only stars keep compact hit areas', () => {
+test('ten-point rating control saves the selected value', () => {
+    const selected: Array<number | null> = [];
+    const renderer = render(createElement(RatingPickerPanel, {
+        value: null,
+        onRate: (value) => {
+            selected.push(value);
+        },
+        onClose: () => undefined,
+    }));
+
+    const eighthPoint = renderer.getByRole('radio', { name: '8 из 10' });
+    assert.equal(renderer.getAllByRole('radio').length, 10);
+    fireEvent.click(eighthPoint);
+    assert.equal(eighthPoint.getAttribute('aria-checked'), 'true');
+    fireEvent.click(renderer.getByRole('button', { name: 'Сохранить оценку' }));
+    assert.deepEqual(selected, [ 8 ]);
+});
+
+test('existing rating can be removed from the rating popover', () => {
+    const selected: Array<number | null> = [];
+    const renderer = render(createElement(RatingPickerPanel, {
+        value: 7,
+        onRate: (value) => {
+            selected.push(value);
+        },
+        onClose: () => undefined,
+    }));
+
+    assert.equal(renderer.getByRole('radio', { name: '7 из 10' }).getAttribute('aria-checked'), 'true');
+    fireEvent.click(renderer.getByRole('button', { name: 'Удалить оценку' }));
+    assert.deepEqual(selected, [ null ]);
+});
+
+test('rejected rating keeps the picker open', async () => {
+    let closed = false;
+    const renderer = render(createElement(RatingPickerPanel, {
+        value: 6,
+        onRate: () => false,
+        onClose: () => {
+            closed = true;
+        },
+    }));
+
+    fireEvent.click(renderer.getByRole('button', { name: 'Сохранить оценку' }));
+    await Promise.resolve();
+    assert.equal(closed, false);
+});
+
+test('rating control uses roving focus and arrow-key navigation', () => {
+    const renderer = render(createElement(RatingPickerPanel, {
+        value: 6,
+        onRate: () => undefined,
+        onClose: () => undefined,
+    }));
+    const sixthPoint = renderer.getByRole('radio', { name: '6 из 10' });
+    const seventhPoint = renderer.getByRole('radio', { name: '7 из 10' });
+
+    assert.equal(sixthPoint.tabIndex, 0);
+    assert.equal(seventhPoint.tabIndex, -1);
+    sixthPoint.focus();
+    fireEvent.keyDown(sixthPoint, { key: 'ArrowRight' });
+    assert.equal(seventhPoint.getAttribute('aria-checked'), 'true');
+    assert.equal(renderer.container.ownerDocument.activeElement, seventhPoint);
+});
+
+test('rating control ignores a repeated save while the first request is pending', async () => {
+    let requestCount = 0;
+    let finishRequest: ((value: boolean) => void) | undefined;
+    const renderer = render(createElement(RatingPickerPanel, {
+        value: 6,
+        onRate: () => {
+            requestCount++;
+            return new Promise<boolean>((resolve) => {
+                finishRequest = resolve;
+            });
+        },
+        onClose: () => undefined,
+    }));
+    const saveButton = renderer.getByRole('button', { name: 'Сохранить оценку' });
+
+    fireEvent.click(saveButton);
+    fireEvent.click(saveButton);
+    assert.equal(requestCount, 1);
+    finishRequest?.(true);
+    await Promise.resolve();
+});
+
+test('read-only stars map the ten-point rating to five compact stars', () => {
     const renderer = render(createElement(RatingStars, { value: 4 }));
-    const stars = Array.from(renderer.container.querySelectorAll('button'));
+    const stars = Array.from(renderer.container.querySelectorAll('[data-rating-star]'));
     assert.equal(stars.length, 5);
-    assert.ok(stars.every((star) => !star.className.includes('size-11')));
+    assert.equal(renderer.container.querySelectorAll('button').length, 0);
+    assert.ok(renderer.getByLabelText('Рейтинг 4.0 из 10'));
 });
 
 test('cast prefers rich entries and expands and collapses the first eight actors', async () => {
@@ -218,11 +304,46 @@ test('cast portrait replaces a failed image with a stable placeholder', async ()
         cast: [ castMember(1, 'https://example.com/actor.jpg') ],
         legacyStarring: [],
     }));
-    const image = renderer.getByRole('img', { name: 'Актёр 1' });
+    const image = renderer.container.querySelector('img');
+    assert.ok(image);
+    assert.equal(image.getAttribute('alt'), '');
 
     fireEvent.error(image);
     assert.equal(renderer.queryByRole('img'), null);
     assert.match(renderer.container.textContent ?? '', /Актёр 1/);
+});
+
+test('cast entries use compact round portraits with name and role to the right', async () => {
+    const renderer = await renderWithRouter(createElement(MovieCast, {
+        cast: [ castMember(1, 'https://example.com/actor.jpg') ],
+        legacyStarring: [],
+    }));
+    const image = renderer.container.querySelector('img');
+    assert.ok(image);
+    const personLink = renderer.getByRole('link');
+
+    assert.match(image.className, /rounded-full/);
+    assert.match(image.className, /size-12/);
+    assert.match(personLink.className, /flex/);
+    assert.match(personLink.textContent ?? '', /Актёр 1/);
+    assert.match(personLink.textContent ?? '', /Роль 1/);
+});
+
+test('movie rating server accepts ten points, supports removal, and migrates legacy values', () => {
+    const server = read('src/server/movies.ts');
+    const migration = read('prisma/migrations/20260821100000_rating_ten_point/migration.sql');
+    const seed = read('prisma/seed.ts');
+    const ratings = read('src/components/movies/MovieRatings.tsx');
+
+    assert.match(server, /value: z\.number\(\)\.int\(\)\.min\(1\)\.max\(10\)\.nullable\(\)/);
+    assert.match(server, /db\.rating\.deleteMany/);
+    assert.match(migration, /^BEGIN;/);
+    assert.match(migration, /WHERE "value" NOT BETWEEN 1 AND 5/);
+    assert.match(migration, /SET "value" = "value" \* 2/);
+    assert.match(migration, /CHECK \("value" BETWEEN 1 AND 10\)/);
+    assert.match(migration, /COMMIT;\s*$/);
+    assert.match(seed, /const value = 4 \+ Math\.floor\(rand\(\) \* 7\); \/\/ 4\.\.10/);
+    assert.match(ratings, /aria-label="Оценить фильм"/);
 });
 
 test('person route helpers cover back fallback, loader error, and image failure', async () => {
