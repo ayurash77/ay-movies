@@ -325,6 +325,7 @@ test('cast entries use compact round portraits with name and role to the right',
     assert.match(image.className, /rounded-full/);
     assert.match(image.className, /size-12/);
     assert.match(personLink.className, /flex/);
+    assert.match(personLink.className, /h-\[84px\]/);
     assert.match(personLink.textContent ?? '', /Актёр 1/);
     assert.match(personLink.textContent ?? '', /Роль 1/);
     const name = renderer.getByRole('heading', { level: 3 });

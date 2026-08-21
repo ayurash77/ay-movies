@@ -361,6 +361,146 @@ test('kinopoisk detail enriches cast roles in batches while preserving cast orde
     }
 });
 
+test('kinopoisk detail keeps every original role when the second cast batch fails', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+    const personRequests: URL[] = [];
+    process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+    globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+
+        if (url.pathname === '/v1.4/movie/123') {
+            return Response.json({
+                id: 123,
+                name: 'Тестовый фильм',
+                persons: Array.from({ length: 11 }, (_, index) => ({
+                    id: index + 1,
+                    name: `Актёр ${index + 1}`,
+                    enProfession: 'actor',
+                    description: null,
+                })),
+            });
+        }
+        if (url.pathname === '/v1.4/season') return Response.json({ docs: [] });
+        if (url.pathname === '/v1.4/person') {
+            personRequests.push(url);
+            if (url.searchParams.getAll('id').includes('11')) {
+                return new Response(null, { status: 503 });
+            }
+            return Response.json({
+                docs: url.searchParams.getAll('id').map((id) => ({
+                    id,
+                    movies: [ {
+                        id: 123,
+                        enProfession: 'actor',
+                        description: `Персонаж ${id}`,
+                    } ],
+                })),
+            });
+        }
+
+        throw new Error(`Unexpected Kinopoisk URL: ${url}`);
+    };
+
+    try {
+        const details = await loadKinopoiskCandidate('123');
+
+        assert.equal(personRequests.length, 2);
+        assert.deepEqual(
+            details?.cast.map(({ externalId, role }) => ({ externalId, role })),
+            Array.from({ length: 11 }, (_, index) => ({
+                externalId: String(index + 1),
+                role: null,
+            })),
+        );
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+    }
+});
+
+test('kinopoisk cast role enrichment shares one deadline across four workers', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+    const personRequests: URL[] = [];
+    const signals = new Set<AbortSignal>();
+    const pendingResponses: Array<() => void> = [];
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    let respondImmediately = false;
+    process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+    globalThis.fetch = async (input, init) => {
+        const url = new URL(String(input));
+
+        if (url.pathname === '/v1.4/movie/123') {
+            return Response.json({
+                id: 123,
+                name: 'Тестовый фильм',
+                persons: Array.from({ length: 41 }, (_, index) => ({
+                    id: index + 1,
+                    name: `Актёр ${index + 1}`,
+                    enProfession: 'actor',
+                    description: null,
+                })),
+            });
+        }
+        if (url.pathname === '/v1.4/season') return Response.json({ docs: [] });
+        if (url.pathname === '/v1.4/person') {
+            personRequests.push(url);
+            assert.ok(init?.signal instanceof AbortSignal);
+            signals.add(init.signal);
+            const response = () => Response.json({
+                docs: url.searchParams.getAll('id').map((id) => ({
+                    id,
+                    movies: [ {
+                        id: 123,
+                        enProfession: 'actor',
+                        description: `Персонаж ${id}`,
+                    } ],
+                })),
+            });
+            if (respondImmediately) return response();
+
+            activeRequests++;
+            maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+            return new Promise<Response>((resolve) => {
+                pendingResponses.push(() => {
+                    activeRequests--;
+                    resolve(response());
+                });
+            });
+        }
+
+        throw new Error(`Unexpected Kinopoisk URL: ${url}`);
+    };
+
+    const detailsPromise = loadKinopoiskCandidate('123');
+    try {
+        for (let microtask = 0; microtask < 20; microtask++) await Promise.resolve();
+
+        assert.equal(personRequests.length, 4);
+        assert.equal(maxActiveRequests, 4);
+        assert.equal(signals.size, 1);
+
+        respondImmediately = true;
+        for (const resolve of pendingResponses.splice(0)) resolve();
+        const details = await detailsPromise;
+
+        assert.equal(personRequests.length, 5);
+        assert.equal(maxActiveRequests, 4);
+        assert.equal(signals.size, 1);
+        assert.equal(details?.cast.every((member) => member.role?.startsWith('Персонаж ')), true);
+    } finally {
+        respondImmediately = true;
+        for (const resolve of pendingResponses.splice(0)) resolve();
+        await detailsPromise;
+        globalThis.fetch = previousFetch;
+        if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+    }
+});
+
 test('kinopoisk detail falls back when person role payload is malformed', async () => {
     const previousFetch = globalThis.fetch;
     const previousToken = process.env.KINOPOISK_DEV_TOKEN;

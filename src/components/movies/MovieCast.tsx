@@ -76,7 +76,7 @@ export function MovieCast({ cast, legacyStarring }: { cast: MovieCastPerson[]; l
                         key={member.personId}
                         to="/people/$personId"
                         params={{ personId: member.personId }}
-                        className="group flex min-w-0 items-center gap-2 rounded-md border border-card-border bg-card p-2 shadow-[0_8px_20px_rgb(0_0_0/0.16)] transition-colors hover:border-primary/60"
+                        className="group flex h-[84px] min-w-0 items-center gap-2 rounded-md border border-card-border bg-card p-2 shadow-[0_8px_20px_rgb(0_0_0/0.16)] transition-colors hover:border-primary/60"
                     >
                         <CastPortrait member={member}/>
                         <div className="min-w-0">

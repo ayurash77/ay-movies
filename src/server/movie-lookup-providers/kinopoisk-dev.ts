@@ -526,31 +526,51 @@ async function loadKinopoiskSeasons(movieId: string) {
 async function loadKinopoiskCastRoles(movieId: string, cast: MovieCastMember[]) {
     const roleByPersonId = new Map<string, string>();
     const ids = cast.filter((member) => !member.role).map((member) => member.externalId);
+    const chunks = Array.from(
+        { length: Math.ceil(ids.length / CAST_ROLE_BATCH_SIZE) },
+        (_, index) => ids.slice(index * CAST_ROLE_BATCH_SIZE, (index + 1) * CAST_ROLE_BATCH_SIZE),
+    );
+    const enrichmentSignal = AbortSignal.timeout(15000);
+    let complete = true;
+    let nextChunk = 0;
 
-    for (let offset = 0; offset < ids.length; offset += CAST_ROLE_BATCH_SIZE) {
-        const chunk = ids.slice(offset, offset + CAST_ROLE_BATCH_SIZE);
-        const params = new URLSearchParams({ limit: String(chunk.length) });
-        for (const id of chunk) params.append('id', id);
-        for (const field of [ 'id', 'movies' ]) params.append('selectFields', field);
+    await Promise.all(Array.from({ length: Math.min(4, chunks.length) }, async () => {
+        while (complete && nextChunk < chunks.length) {
+            const chunk = chunks[nextChunk++];
+            const params = new URLSearchParams({ limit: String(chunk.length) });
+            for (const id of chunk) params.append('id', id);
+            for (const field of [ 'id', 'movies' ]) params.append('selectFields', field);
 
-        const response = await kinopoiskJson<KinopoiskPersonResponse>('/v1.4/person', params);
-        if (!response) return null;
+            const response = await kinopoiskJson<KinopoiskPersonResponse>(
+                '/v1.4/person',
+                params,
+                enrichmentSignal,
+            );
+            if (!response || !Array.isArray(response.docs)) {
+                complete = false;
+                return;
+            }
 
-        if (!Array.isArray(response.docs)) return null;
-        for (const person of response.docs) {
-            const personData = record(person);
-            if (!personData || !Array.isArray(personData.movies)) return null;
+            for (const person of response.docs) {
+                const personData = record(person);
+                if (!personData || !Array.isArray(personData.movies)) {
+                    complete = false;
+                    return;
+                }
 
-            const personId = externalId(personData.id);
-            const credit = personData.movies.find((movie) => {
-                const creditData = record(movie);
-                return externalId(creditData?.id) === movieId
-                    && text(creditData?.enProfession) === 'actor';
-            });
-            const role = boundedText(record(credit)?.description);
-            if (personId && role) roleByPersonId.set(personId, role);
+                const personId = externalId(personData.id);
+                const credit = personData.movies.find((movie) => {
+                    const creditData = record(movie);
+                    return externalId(creditData?.id) === movieId
+                        && text(creditData?.enProfession) === 'actor';
+                });
+                const role = boundedText(record(credit)?.description);
+                if (personId && role) roleByPersonId.set(personId, role);
+            }
         }
-    }
+    }));
+
+    if (!complete) return null;
 
     return cast.map((member) => ({
         ...member,
