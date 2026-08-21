@@ -71,12 +71,12 @@ test('movie form keeps imported series data without manual season inputs', () =>
 
     assert.doesNotMatch(form, /name="seasonsCount"/);
     assert.doesNotMatch(form, /name="episodesPerSeason"/);
-    assert.match(form, /seasonsCount: defaults\?\.seasonsCount/);
-    assert.match(form, /episodesPerSeason: defaults\?\.episodesPerSeason/);
+    assert.match(form, /seasonsCount: submittedKind === 'SERIES' \? defaults\?\.seasonsCount : undefined/);
+    assert.match(form, /episodesPerSeason: submittedKind === 'SERIES' \? defaults\?\.episodesPerSeason : undefined/);
     assert.match(form, /metadataProvider: defaults\?\.metadataProvider/);
     assert.match(form, /metadataExternalId: defaults\?\.metadataExternalId/);
     assert.match(form, /submitImportedSeriesSnapshot\?: boolean/);
-    assert.match(form, /seriesSeasons: submitImportedSeriesSnapshot \? defaults\?\.seriesSeasons : undefined/);
+    assert.match(form, /seriesSeasons: submittedKind === 'SERIES' && submitImportedSeriesSnapshot/);
     assert.match(form, /metadataImportSucceeded\?: boolean/);
     assert.match(form, /metadataImportSucceeded,/);
     assert.match(form, /submitDisabled\?: boolean/);

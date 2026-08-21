@@ -172,8 +172,10 @@ export function MovieForm({
                 posterUrl = uploaded.url;
             }
 
+            const submittedKind = String(form.get('kind') ?? 'MOVIE') as MovieFormFields['kind'];
+
             await onSubmit({
-                kind: String(form.get('kind') ?? 'MOVIE') as MovieFormFields['kind'],
+                kind: submittedKind,
                 title: String(form.get('title') ?? ''),
                 year: Number(form.get('year') ?? 0),
                 country: String(form.get('country') ?? ''),
@@ -187,12 +189,14 @@ export function MovieForm({
                 durationMin: form.get('durationMin')
                     ? Number(form.get('durationMin'))
                     : '',
-                seasonsCount: defaults?.seasonsCount,
-                episodesPerSeason: defaults?.episodesPerSeason,
+                seasonsCount: submittedKind === 'SERIES' ? defaults?.seasonsCount : undefined,
+                episodesPerSeason: submittedKind === 'SERIES' ? defaults?.episodesPerSeason : undefined,
                 metadataProvider: defaults?.metadataProvider,
                 metadataExternalId: defaults?.metadataExternalId,
                 metadataImportSucceeded,
-                seriesSeasons: submitImportedSeriesSnapshot ? defaults?.seriesSeasons : undefined,
+                seriesSeasons: submittedKind === 'SERIES' && submitImportedSeriesSnapshot
+                    ? defaults?.seriesSeasons
+                    : undefined,
                 externalRatings: metadataImportSucceeded ? defaults?.externalRatings : undefined,
                 cast: metadataImportSucceeded ? defaults?.cast : undefined,
                 videos: metadataImportSucceeded ? defaults?.videos : undefined,

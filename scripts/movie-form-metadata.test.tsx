@@ -75,3 +75,24 @@ test('movie form does not submit stale automatic videos without a successful imp
     await waitFor(() => assert.equal(submissions.length, 1));
     assert.equal(submissions[0]?.videos, undefined);
 });
+
+test('movie form omits zero season metadata returned for a film', async () => {
+    const submissions: MovieFormFields[] = [];
+    const view = render(createElement(MovieForm, {
+        defaults: {
+            ...defaults,
+            seasonsCount: 0,
+            episodesPerSeason: '',
+        },
+        submitLabel: 'Сохранить',
+        metadataImportSucceeded: true,
+        onSubmit: async (fields) => {
+            submissions.push(fields);
+        },
+    }));
+
+    fireEvent.submit(view.container.querySelector('form')!);
+    await waitFor(() => assert.equal(submissions.length, 1));
+    assert.equal(submissions[0]?.seasonsCount, undefined);
+    assert.equal(submissions[0]?.episodesPerSeason, undefined);
+});
