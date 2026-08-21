@@ -215,6 +215,5 @@ export function movieVideoEmbedUrl(value: string) {
     if (supported.key.startsWith('vimeo:')) {
         return `https://player.vimeo.com/video/${supported.key.slice('vimeo:'.length)}`;
     }
-    if (supported.key.startsWith('kinopoisk:')) return supported.url;
     return null;
 }

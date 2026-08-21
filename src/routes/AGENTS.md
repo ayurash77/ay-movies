@@ -37,7 +37,9 @@
   `movie.trailerUrls`: automatic идут первыми, дубликаты скрываются, iframe
   создается только в открытом dialog. Карточки читают сохраненный
   `video.thumbnailUrl` и используют нейтральный fallback без постера фильма.
-  Не запрашивай video provider из detail.
+  Kinopoisk Widget не встраивается из-за `X-Frame-Options: DENY` и открывается
+  внешней ссылкой; dialog используется для YouTube/Vimeo. Не запрашивай video
+  provider из detail.
 - Для сериалов detail показывает вкладки `О сериале` и `Сезоны и серии`.
   `SeriesSeasons` отображает нормализованные подробные данные из
   `movie.seriesSeasons` (названия, даты, описание, кадры) с сезонным

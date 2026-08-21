@@ -40,7 +40,7 @@ function automaticVideo(
 ): MovieVideoMetadata {
     return {
         provider: 'kinopoisk-unofficial',
-        site: 'YOUTUBE',
+        site: url.includes('widgets.kinopoisk.ru') ? 'KINOPOISK_WIDGET' : 'YOUTUBE',
         title: `Трейлер ${position + 1}`,
         kind: position % 2 === 0 ? 'TRAILER' : 'TEASER',
         url,
@@ -124,6 +124,20 @@ test('unsupported manual video remains an external link', () => {
 
     const link = view.getByRole('link', { name: 'Открыть Трейлер 1' });
     assert.equal(link.getAttribute('href'), 'https://example.com/trailer');
+    assert.equal(link.getAttribute('target'), '_blank');
+    assert.equal(document.querySelectorAll('iframe').length, 0);
+});
+
+test('Kinopoisk trailer opens externally because the provider forbids iframe embedding', () => {
+    const url = 'https://widgets.kinopoisk.ru/discovery/trailer/42';
+    const view = render(createElement(MovieTrailers, {
+        title: 'Фильм',
+        automaticVideos: [ automaticVideo(0, null, url) ],
+        manualUrls: [],
+    }));
+
+    const link = view.getByRole('link', { name: 'Открыть Трейлер 1' });
+    assert.equal(link.getAttribute('href'), url);
     assert.equal(link.getAttribute('target'), '_blank');
     assert.equal(document.querySelectorAll('iframe').length, 0);
 });

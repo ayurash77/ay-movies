@@ -174,7 +174,7 @@ test('embed conversion only accepts supported player URLs', () => {
     );
     assert.equal(
         movieVideoEmbedUrl('https://widgets.kinopoisk.ru/discovery/trailer/42'),
-        'https://widgets.kinopoisk.ru/discovery/trailer/42',
+        null,
     );
     assert.equal(movieVideoEmbedUrl('https://example.com/video'), null);
 });

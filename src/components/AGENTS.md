@@ -49,7 +49,8 @@
   playback. Карточка использует `video.thumbnailUrl`; YouTube preview для
   ручной ссылки может вычисляться локально. При отсутствии preview показывай
   нейтральный fallback и никогда не подставляй общий постер фильма.
-  Неподдерживаемые ручные ссылки остаются external links.
+  Kinopoisk Widget запрещает iframe через `X-Frame-Options: DENY`, поэтому его
+  карточки и неподдерживаемые ручные ссылки остаются external links.
 - Для загрузки изображений используй только `Skeleton` и `ProgressiveImage` из
   `src/components/ui`. Размер задает wrapper (`aspect-*`, `size-*`), Skeleton и
   fallback не должны менять layout; off-screen изображения остаются lazy.
