@@ -80,11 +80,11 @@ export function MovieCast({ cast, legacyStarring }: { cast: MovieCastPerson[]; l
                     >
                         <CastPortrait member={member}/>
                         <div className="min-w-0">
-                            <h3 className="truncate text-sm font-semibold leading-tight group-hover:text-primary">
+                            <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug group-hover:text-primary">
                                 {member.name}
                             </h3>
                             {member.role ? (
-                                <p className="mt-1 truncate text-xs leading-tight text-muted-foreground">
+                                <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
                                     {member.role}
                                 </p>
                             ) : null}

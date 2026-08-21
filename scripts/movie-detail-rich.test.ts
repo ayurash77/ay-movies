@@ -327,6 +327,12 @@ test('cast entries use compact round portraits with name and role to the right',
     assert.match(personLink.className, /flex/);
     assert.match(personLink.textContent ?? '', /Актёр 1/);
     assert.match(personLink.textContent ?? '', /Роль 1/);
+    const name = renderer.getByRole('heading', { level: 3 });
+    const role = renderer.getByText('Роль 1');
+    assert.match(name.className, /line-clamp-2/);
+    assert.doesNotMatch(name.className, /truncate/);
+    assert.match(role.className, /line-clamp-2/);
+    assert.match(role.className, /text-\[11px\]/);
 });
 
 test('movie rating server accepts ten points, supports removal, and migrates legacy values', () => {
