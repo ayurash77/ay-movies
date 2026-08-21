@@ -35,7 +35,9 @@
   legacy `starring`.
 - `MovieTrailers` объединяет локальные `movie.videos` с ручными
   `movie.trailerUrls`: automatic идут первыми, дубликаты скрываются, iframe
-  создается только в открытом dialog. Не запрашивай video provider из detail.
+  создается только в открытом dialog. Карточки читают сохраненный
+  `video.thumbnailUrl` и используют нейтральный fallback без постера фильма.
+  Не запрашивай video provider из detail.
 - Для сериалов detail показывает вкладки `О сериале` и `Сезоны и серии`.
   `SeriesSeasons` отображает нормализованные подробные данные из
   `movie.seriesSeasons` (названия, даты, описание, кадры) с сезонным
@@ -63,6 +65,7 @@
   routes всегда использует термин «рецензия».
 
 Focused проверки: `pnpm test:lookup`, `pnpm test:movie-videos`,
+`pnpm test:movie-video-thumbnails`,
 `pnpm test:movie-trailers`, `pnpm test:loading-ui`, `pnpm test:rich-metadata`,
 `pnpm test:people`, `pnpm test:movie-detail-rich`, `pnpm test:reviews`.
 

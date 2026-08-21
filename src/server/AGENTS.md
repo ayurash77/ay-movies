@@ -38,6 +38,11 @@
   Video endpoint Kinopoisk Unofficial дополняет детали совместимого Kinopoisk
   ID трейлерами/тизерами независимо от выбранного Kinopoisk search provider.
   Сохраняются только allowlisted HTTPS YouTube/Vimeo/Kinopoisk widget URL.
+- `movie-video-thumbnails.ts` дополняет video snapshot превью: YouTube URL
+  вычисляется без сети, Kinopoisk Widget page читается только на сервере и
+  разбирается через точный JSON `script[data-state]`. Используй общий deadline,
+  ограниченный concurrency и локальную обработку ошибок; не добавляй provider
+  fetch в movie detail.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
 - `people.ts` — `getPerson` по локальному `Person.id`: cache TTL 7 дней,
   stale fallback, merge partial refresh и 15-минутный retry backoff по
@@ -90,8 +95,10 @@
 - Пользовательский `Rating.value` хранится по шкале 1–10 и защищён DB check;
   миграция `20260821100000_rating_ten_point` удваивает старые значения 1–5.
 - `MovieVideo` — provider snapshot, а `Movie.trailerUrls` — ручные ссылки.
-  Миграция `20260821130000_movie_videos` только добавляет enum/table/indexes/FK;
-  production применяет ее через `prisma migrate deploy`.
+  `MovieVideo.thumbnailUrl` — nullable HTTPS preview конкретного видео.
+  Миграции `20260821130000_movie_videos` и
+  `20260821170000_movie_video_thumbnails` применяются в production через
+  `prisma migrate deploy`.
 
 ## Focused проверки
 
@@ -99,6 +106,7 @@
 pnpm test:series-metadata
 pnpm test:lookup
 pnpm test:movie-videos
+pnpm test:movie-video-thumbnails
 pnpm test:movie-trailers
 pnpm test:loading-ui
 pnpm test:rich-metadata

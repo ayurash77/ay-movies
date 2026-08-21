@@ -32,8 +32,9 @@ pnpm db:studio       # Prisma Studio
 Timeweb VDS: domain `movies.ayurash.ru`, исходники
 `/opt/ayurash/apps/ay-movies`, Compose project `/opt/ayurash`, service
 `ay-movies`, runtime env `/opt/ayurash/env/ay-movies.env`. Контейнер применяет
-миграции через `prisma migrate deploy`; для автоматических видео нужна
-`20260821130000_movie_videos`. Env names: `DATABASE_URL`,
+миграции через `prisma migrate deploy`; для автоматических видео и их превью
+нужны `20260821130000_movie_videos` и
+`20260821170000_movie_video_thumbnails`. Env names: `DATABASE_URL`,
 `SESSION_SECRET`, `WEB_ALLOWED_HOSTS`, `S3_*`, `KINOPOISK_DEV_TOKEN`,
 `KINOPOISK_DEV_BASE_URL`, `KINOPOISK_UNOFFICIAL_TOKEN`,
 `KINOPOISK_UNOFFICIAL_BASE_URL`.
@@ -108,10 +109,15 @@ default-порядок не переопределяет явный выбор �
   fallback.
 - Автоматические трейлеры/тизеры приходят через video endpoint Kinopoisk
   Unofficial при добавлении или явном `Обновить` и хранятся в `MovieVideo`.
+  YouTube preview вычисляется из video ID; preview Kinopoisk Widget сервер
+  извлекает из JSON `data-state` страницы widget с ограниченным concurrency и
+  общим timeout. `thumbnailUrl` сохраняется в snapshot, detail не обращается к
+  provider. Для старых записей preview появляется после `Обновить`.
   `Movie.trailerUrls` остается отдельным ручным контентом пользователя. Detail
   читает оба источника только из БД, дедуплицирует их для отображения и создает
-  iframe только после выбора карточки. Пустой/ошибочный refresh не удаляет
-  ранее сохраненный непустой video snapshot.
+  iframe только после выбора карточки. UI использует preview конкретного видео,
+  а при его отсутствии нейтральный fallback, не постер фильма. Пустой/ошибочный
+  refresh не удаляет ранее сохраненный непустой video snapshot.
 - `/people/$personId` использует локальный `Person.id`. Профиль и полная
   актерская фильмография кэшируются на 7 дней. `profileRefreshAttemptedAt`
   фиксирует complete, partial и failed provider attempts; 15-минутный backoff
@@ -149,6 +155,8 @@ default-порядок не переопределяет явный выбор �
   `prisma migrate deploy` при старте контейнера.
 - Миграция `prisma/migrations/20260821130000_movie_videos` добавляет enum и
   таблицу `MovieVideo` без изменения старых `trailerUrls`.
+- Миграция `prisma/migrations/20260821170000_movie_video_thumbnails` добавляет
+  nullable `MovieVideo.thumbnailUrl` без backfill.
 
 Полезные focused проверки:
 
@@ -156,6 +164,7 @@ default-порядок не переопределяет явный выбор �
 pnpm test:series-metadata
 pnpm test:lookup
 pnpm test:movie-videos
+pnpm test:movie-video-thumbnails
 pnpm test:movie-trailers
 pnpm test:loading-ui
 pnpm test:rich-metadata

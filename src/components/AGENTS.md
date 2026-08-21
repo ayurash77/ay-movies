@@ -46,7 +46,10 @@
   placeholder.
 - `MovieTrailers` показывает automatic `MovieVideo` перед ручными
   `trailerUrls`, не монтирует iframe до клика и закрытием dialog прекращает
-  playback. Неподдерживаемые ручные ссылки остаются external links.
+  playback. Карточка использует `video.thumbnailUrl`; YouTube preview для
+  ручной ссылки может вычисляться локально. При отсутствии preview показывай
+  нейтральный fallback и никогда не подставляй общий постер фильма.
+  Неподдерживаемые ручные ссылки остаются external links.
 - Для загрузки изображений используй только `Skeleton` и `ProgressiveImage` из
   `src/components/ui`. Размер задает wrapper (`aspect-*`, `size-*`), Skeleton и
   fallback не должны менять layout; off-screen изображения остаются lazy.
@@ -55,5 +58,6 @@
   `ay-movies:open-profile`. Один общий `mutationLock` сериализует add/update/
   delete и блокирует открытие редактора во время mutation.
 
-Focused проверки: `pnpm test:movie-trailers`, `pnpm test:loading-ui`,
+Focused проверки: `pnpm test:movie-video-thumbnails`,
+`pnpm test:movie-trailers`, `pnpm test:loading-ui`,
 `pnpm test:movie-detail-rich` и `pnpm test:reviews`.
