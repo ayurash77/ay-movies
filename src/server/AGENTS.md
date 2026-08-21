@@ -20,6 +20,8 @@
 - `movie-rich-metadata.ts` — сохраняет rating snapshots и ordered cast через
   `Person`/`MoviePersonCredit`. Detail читает только БД. Частичные ratings
   обновляют переданные поля, а пустой/неуспешный cast сохраняет старые credits.
+  Здесь же непустой автоматический video snapshot атомарно заменяет
+  `MovieVideo`; пустой/неуспешный snapshot ничего не удаляет.
 - `movie-lookup.ts` — `lookupMovieCandidates` параллельно вызывает доступные
   Kinopoisk searches, возвращает легкие candidates и упорядочивает общий список
   с `kinopoisk.dev` как preferred/default. `loadMovieLookupDetails` загружает
@@ -33,6 +35,9 @@
   обогащает отсутствующие роли актеров из filmography персон: batches до 10 ID,
   concurrency 4 и общий deadline 15 секунд; ошибка любого batch сохраняет
   исходный ordered cast без частичных ролей.
+  Video endpoint Kinopoisk Unofficial дополняет детали совместимого Kinopoisk
+  ID трейлерами/тизерами независимо от выбранного Kinopoisk search provider.
+  Сохраняются только allowlisted HTTPS YouTube/Vimeo/Kinopoisk widget URL.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
 - `people.ts` — `getPerson` по локальному `Person.id`: cache TTL 7 дней,
   stale fallback, merge partial refresh и 15-минутный retry backoff по
@@ -84,12 +89,18 @@
   внутренние relations/counts по-прежнему называются `comments`.
 - Пользовательский `Rating.value` хранится по шкале 1–10 и защищён DB check;
   миграция `20260821100000_rating_ten_point` удваивает старые значения 1–5.
+- `MovieVideo` — provider snapshot, а `Movie.trailerUrls` — ручные ссылки.
+  Миграция `20260821130000_movie_videos` только добавляет enum/table/indexes/FK;
+  production применяет ее через `prisma migrate deploy`.
 
 ## Focused проверки
 
 ```bash
 pnpm test:series-metadata
 pnpm test:lookup
+pnpm test:movie-videos
+pnpm test:movie-trailers
+pnpm test:loading-ui
 pnpm test:rich-metadata
 pnpm test:people
 pnpm test:movie-form-flow

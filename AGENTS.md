@@ -32,8 +32,8 @@ pnpm db:studio       # Prisma Studio
 Timeweb VDS: domain `movies.ayurash.ru`, исходники
 `/opt/ayurash/apps/ay-movies`, Compose project `/opt/ayurash`, service
 `ay-movies`, runtime env `/opt/ayurash/env/ay-movies.env`. Контейнер применяет
-миграции через `prisma migrate deploy`; для этой функции нужна
-`20260820200000_movie_people_reviews`. Env names: `DATABASE_URL`,
+миграции через `prisma migrate deploy`; для автоматических видео нужна
+`20260821130000_movie_videos`. Env names: `DATABASE_URL`,
 `SESSION_SECRET`, `WEB_ALLOWED_HOSTS`, `S3_*`, `KINOPOISK_DEV_TOKEN`,
 `KINOPOISK_DEV_BASE_URL`, `KINOPOISK_UNOFFICIAL_TOKEN`,
 `KINOPOISK_UNOFFICIAL_BASE_URL`.
@@ -65,7 +65,7 @@ default-порядок не переопределяет явный выбор �
 
 Функции приложения:
 - Каталог фильмов/сериалов/мультфильмов с пагинацией, поиском, сортировкой, фильтрами и группировками по происхождению, странам и жанрам.
-- Карточки, страницы деталей, несколько ссылок на трейлеры, ссылки "где смотреть", рейтинги 1–10, рецензии, watch list.
+- Карточки, страницы деталей, ручные и автоматически импортированные трейлеры/тизеры, ссылки "где смотреть", рейтинги 1–10, рецензии, watch list.
 - У сериалов есть совместимые summary-поля `seasonsCount`/`episodesPerSeason` и
   нормализованные `SeriesSeason`/`SeriesEpisode` с локальными и оригинальными
   названиями, описаниями, датами и изображениями эпизодов.
@@ -106,6 +106,12 @@ default-порядок не переопределяет явный выбор �
   person filmography пакетами до 10 ID, concurrency 4 и с общим deadline 15
   секунд; ошибка сохраняет исходный ordered cast. `starring` остается legacy
   fallback.
+- Автоматические трейлеры/тизеры приходят через video endpoint Kinopoisk
+  Unofficial при добавлении или явном `Обновить` и хранятся в `MovieVideo`.
+  `Movie.trailerUrls` остается отдельным ручным контентом пользователя. Detail
+  читает оба источника только из БД, дедуплицирует их для отображения и создает
+  iframe только после выбора карточки. Пустой/ошибочный refresh не удаляет
+  ранее сохраненный непустой video snapshot.
 - `/people/$personId` использует локальный `Person.id`. Профиль и полная
   актерская фильмография кэшируются на 7 дней. `profileRefreshAttemptedAt`
   фиксирует complete, partial и failed provider attempts; 15-минутный backoff
@@ -141,12 +147,17 @@ default-порядок не переопределяет явный выбор �
 - Миграция `prisma/migrations/20260820170000_series_episode_metadata` добавляет
   source-поля и таблицы без backfill; production применяет ее через
   `prisma migrate deploy` при старте контейнера.
+- Миграция `prisma/migrations/20260821130000_movie_videos` добавляет enum и
+  таблицу `MovieVideo` без изменения старых `trailerUrls`.
 
 Полезные focused проверки:
 
 ```bash
 pnpm test:series-metadata
 pnpm test:lookup
+pnpm test:movie-videos
+pnpm test:movie-trailers
+pnpm test:loading-ui
 pnpm test:rich-metadata
 pnpm test:people
 pnpm test:movie-form-flow
@@ -173,6 +184,11 @@ pnpm test:reviews
 - Автоскролл чата должен скроллить сам messages container до `scrollHeight`, а не использовать marker `scrollIntoView`, иначе последние сообщения визуально уходят под composer.
 - На мобильных sidebar открывается через sheet; не возвращай autofocus поиска при открытии.
 - Визуальный стиль: компактные радиусы, сильные тени у карточек/header, тематические цвета, Tailwind 4 scrollbar colors.
+- `Skeleton` и `ProgressiveImage` из `src/components/ui` — единый путь для
+  loading placeholders изображений. Не добавляй параллельную shimmer-систему.
+- Router использует `defaultPendingMs: 120` и `defaultPendingMinMs: 250`.
+  Каталоги, movie detail и person detail имеют page-shaped pending skeletons;
+  тонкий progress bar всегда остается внутри sticky header.
 
 ## Handoff checklist
 

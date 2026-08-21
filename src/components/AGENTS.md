@@ -44,9 +44,16 @@
 - `PersonFilmography` ведет локальные записи на movie detail с `from`, внешние
   открывает на Кинопоиске в новой вкладке; портреты/постеры имеют стабильный
   placeholder.
+- `MovieTrailers` показывает automatic `MovieVideo` перед ручными
+  `trailerUrls`, не монтирует iframe до клика и закрытием dialog прекращает
+  playback. Неподдерживаемые ручные ссылки остаются external links.
+- Для загрузки изображений используй только `Skeleton` и `ProgressiveImage` из
+  `src/components/ui`. Размер задает wrapper (`aspect-*`, `size-*`), Skeleton и
+  fallback не должны менять layout; off-screen изображения остаются lazy.
 - `ReviewsSection` — публичная терминология для физических `Comment` rows.
   Карточка показывает avatar/name и открывает `ProfileDialog` через событие
   `ay-movies:open-profile`. Один общий `mutationLock` сериализует add/update/
   delete и блокирует открытие редактора во время mutation.
 
-Focused проверки: `pnpm test:movie-detail-rich` и `pnpm test:reviews`.
+Focused проверки: `pnpm test:movie-trailers`, `pnpm test:loading-ui`,
+`pnpm test:movie-detail-rich` и `pnpm test:reviews`.

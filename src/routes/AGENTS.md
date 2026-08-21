@@ -18,6 +18,12 @@
 - Для page-specific кнопок в шапке используй props `leading` и `actions` у `<PageTitle />`; не рисуй отдельную строку с back/edit внутри страницы без необходимости.
 - На основных страницах каталога header показывает залитую icon-only кнопку добавления `h-8`: `/` открывает dropdown выбора типа, `/movies?kind=...` ведет сразу к добавлению этого типа.
 - Header использует backdrop/тень без нижнего `border-b`.
+- `NavigationProgress` рендерится последним слоем header через узкую подписку
+  `useRouterState`; `main` получает `aria-busy` во время перехода.
+- Для loader-heavy маршрутов `/`, `/movies/`, `/movies/$movieId` и
+  `/people/$personId` сохраняй соответствующий `pendingComponent` из
+  `RouteSkeletons`. Глобальные timings находятся в `src/router.tsx`: 120/250 мс.
+  Не подключай page skeleton к add/edit формам или чату.
 
 ## Movie Routes
 
@@ -27,6 +33,9 @@
   provider. В `Описание` остается только `movie.description`; затем идут
   ratings, cast, watch links и рецензии. При пустом rich cast показывается
   legacy `starring`.
+- `MovieTrailers` объединяет локальные `movie.videos` с ручными
+  `movie.trailerUrls`: automatic идут первыми, дубликаты скрываются, iframe
+  создается только в открытом dialog. Не запрашивай video provider из detail.
 - Для сериалов detail показывает вкладки `О сериале` и `Сезоны и серии`.
   `SeriesSeasons` отображает нормализованные подробные данные из
   `movie.seriesSeasons` (названия, даты, описание, кадры) с сезонным
@@ -53,7 +62,8 @@
   `ProfileDialog` через `ay-movies:open-profile`; пользовательский текст в
   routes всегда использует термин «рецензия».
 
-Focused проверки: `pnpm test:lookup`, `pnpm test:rich-metadata`,
+Focused проверки: `pnpm test:lookup`, `pnpm test:movie-videos`,
+`pnpm test:movie-trailers`, `pnpm test:loading-ui`, `pnpm test:rich-metadata`,
 `pnpm test:people`, `pnpm test:movie-detail-rich`, `pnpm test:reviews`.
 
 ## Dashboard/Friends
