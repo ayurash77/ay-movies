@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createRootRoute, HeadContent, Link, Outlet, Scripts, useLocation } from '@tanstack/react-router';
+import { createRootRoute, HeadContent, Link, Outlet, Scripts, useLocation, useRouterState } from '@tanstack/react-router';
 import { ArrowLeft, Film, Menu, Plus } from 'lucide-react';
 import { Toaster } from 'sonner';
 
@@ -8,6 +8,7 @@ import { AppTitleProvider, useAppTitle, useAppToolbar } from '@/components/AppTi
 import { ProfileDialog } from '@/components/ProfileDialog';
 import { Sidebar } from '@/components/Sidebar';
 import { ThemeDialog } from '@/components/ThemeDialog';
+import { NavigationProgress } from '@/components/loading/NavigationProgress';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -54,6 +55,7 @@ function RootLayout() {
     const { pathname, searchStr } = useLocation();
     const appTitle = useAppTitle();
     const appToolbar = useAppToolbar();
+    const navigationPending = useRouterState({ select: (state) => state.status === 'pending' });
     const [ isMobileMenuOpen, setIsMobileMenuOpen ] = useState(false);
     const [ isProfileOpen, setIsProfileOpen ] = useState(false);
     const [ profileUserId, setProfileUserId ] = useState<string | null>(null);
@@ -213,9 +215,13 @@ function RootLayout() {
                             {appToolbar}
                         </div>
                     ) : null}
+                    <NavigationProgress pending={navigationPending}/>
                 </header>
 
-                <main className={isChatRoute ? 'mx-auto flex h-[calc(100svh-3.5rem)] min-h-0 w-full max-w-6xl flex-1 overflow-hidden px-3 py-0 md:px-4 md:py-5' : 'mx-auto w-full max-w-6xl flex-1 px-4 py-5'}>
+                <main
+                    aria-busy={navigationPending}
+                    className={isChatRoute ? 'mx-auto flex h-[calc(100svh-3.5rem)] min-h-0 w-full max-w-6xl flex-1 overflow-hidden px-3 py-0 md:px-4 md:py-5' : 'mx-auto w-full max-w-6xl flex-1 px-4 py-5'}
+                >
                     <Outlet/>
                 </main>
                 {!isChatRoute ? (

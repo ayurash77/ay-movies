@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, MapPin, Ruler, UserRound } from 'lucide-react';
 
 import { PageTitle } from '@/components/AppTitle';
+import { PersonDetailSkeleton } from '@/components/loading/RouteSkeletons';
 import { PersonFilmography } from '@/components/people/PersonFilmography';
 import { Button } from '@/components/ui/button';
 import { ProgressiveImage } from '@/components/ui/progressive-image';
@@ -109,6 +110,7 @@ export function PersonPageContent({ result }: { result: PersonPageResult }) {
 
 export const Route = createFileRoute('/people/$personId')({
     loader: async ({ params }) => getPerson({ data: { personId: params.personId } }),
+    pendingComponent: PersonDetailSkeleton,
     component: PersonPage,
 });
 

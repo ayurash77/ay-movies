@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { z } from 'zod';
 
 import { PageTitle } from '@/components/AppTitle';
+import { CatalogPageSkeleton } from '@/components/loading/RouteSkeletons';
 import { MovieCatalogControls } from '@/components/movies/MovieCatalogControls';
 import { PaginatedMovieGallery } from '@/components/movies/PaginatedMovieGallery';
 import { readCatalogPreferences, storeCatalogPreferences } from '@/lib/catalog-preferences';
@@ -40,6 +41,7 @@ export const Route = createFileRoute('/movies/')({
         genre: search.genre,
     }),
     loader: async ({ deps }) => searchMovies({ data: deps }),
+    pendingComponent: CatalogPageSkeleton,
     component: MoviesPage,
 });
 

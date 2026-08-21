@@ -6,6 +6,12 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import { Window } from 'happy-dom';
 
 import { ProgressiveImage } from '../src/components/ui/progressive-image';
+import { NavigationProgress } from '../src/components/loading/NavigationProgress';
+import {
+    CatalogPageSkeleton,
+    MovieDetailSkeleton,
+    PersonDetailSkeleton,
+} from '../src/components/loading/RouteSkeletons';
 
 const browserWindow = new Window({ url: 'http://localhost/' });
 Object.assign(globalThis, {
@@ -71,4 +77,43 @@ test('movie media surfaces use one progressive image primitive with stable dimen
         assert.match(source, primitive, path);
         assert.match(source, dimension, path);
     }
+});
+
+test('navigation progress only renders while pending', () => {
+    const view = render(createElement(NavigationProgress, { pending: false }));
+    assert.equal(view.queryByRole('progressbar'), null);
+
+    view.rerender(createElement(NavigationProgress, { pending: true }));
+    assert.ok(view.getByRole('progressbar', { name: 'Загрузка страницы' }));
+});
+
+test('route skeletons expose busy state and stable media shapes', () => {
+    const movie = render(createElement(MovieDetailSkeleton));
+    assert.equal(movie.getByLabelText('Загрузка фильма').getAttribute('aria-busy'), 'true');
+    assert.ok(movie.container.querySelector('.aspect-2\\/3'));
+    assert.ok(movie.container.querySelector('.aspect-video'));
+    movie.unmount();
+
+    const catalog = render(createElement(CatalogPageSkeleton));
+    assert.equal(catalog.getByLabelText('Загрузка фильмотеки').getAttribute('aria-busy'), 'true');
+    assert.equal(catalog.container.querySelectorAll('.aspect-\\[3\\/4\\]').length, 8);
+    catalog.unmount();
+
+    const person = render(createElement(PersonDetailSkeleton));
+    assert.equal(person.getByLabelText('Загрузка персоны').getAttribute('aria-busy'), 'true');
+    assert.ok(person.container.querySelector('.aspect-2\\/3'));
+});
+
+test('router and high-traffic routes own delayed pending feedback', () => {
+    const router = read('src/router.tsx');
+    const root = read('src/routes/__root.tsx');
+
+    assert.match(router, /defaultPendingMs:\s*120/);
+    assert.match(router, /defaultPendingMinMs:\s*250/);
+    assert.match(read('src/routes/index.tsx'), /pendingComponent:\s*CatalogPageSkeleton/);
+    assert.match(read('src/routes/movies/index.tsx'), /pendingComponent:\s*CatalogPageSkeleton/);
+    assert.match(read('src/routes/movies/$movieId.tsx'), /pendingComponent:\s*MovieDetailSkeleton/);
+    assert.match(read('src/routes/people/$personId.tsx'), /pendingComponent:\s*PersonDetailSkeleton/);
+    assert.match(root, /useRouterState/);
+    assert.match(root, /<NavigationProgress pending=\{navigationPending\}/);
 });

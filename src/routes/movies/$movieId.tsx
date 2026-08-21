@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { PageTitle } from '@/components/AppTitle';
+import { MovieDetailSkeleton } from '@/components/loading/RouteSkeletons';
 import { ReviewsSection } from '@/components/movies/ReviewsSection';
 import { MovieCast } from '@/components/movies/MovieCast';
 import { MoviePoster } from '@/components/movies/MoviePoster';
@@ -147,6 +148,7 @@ export const Route = createFileRoute('/movies/$movieId')({
         if (!movie) throw notFound();
         return { movie, reviews };
     },
+    pendingComponent: MovieDetailSkeleton,
     component: MoviePage,
     notFoundComponent: () => (
         <div className="flex flex-col items-center gap-4 py-20">

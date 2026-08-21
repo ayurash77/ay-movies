@@ -8,6 +8,8 @@ export const getRouter = () => {
         context: {},
         scrollRestoration: true,
         defaultPreloadStaleTime: 0,
+        defaultPendingMs: 120,
+        defaultPendingMinMs: 250,
     });
 
     return router;
