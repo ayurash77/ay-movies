@@ -18,6 +18,10 @@ import {
     prepareMovieMetadataRefresh,
     resolveMovieMetadataRefresh,
 } from '../src/server/movie-metadata-refresh';
+import {
+    parseMetadataRefreshArgs,
+    runMovieMetadataRefresh,
+} from './refresh-movie-metadata';
 
 const usableSeasons: SeriesSeasonMetadata[] = [ {
     number: 1,
@@ -364,4 +368,82 @@ test('metadata refresh apply replaces a non-empty series snapshot transactionall
     assert.equal(db.calls.transactions, 1);
     assert.equal(db.calls.seriesDeleteMany, 1);
     assert.equal(db.calls.movieUpdate, 1);
+});
+
+test('metadata refresh CLI defaults to dry-run and parses filters', () => {
+    assert.deepEqual(
+        parseMetadataRefreshArgs([ '--limit=5', '--movie-id=abc', '--delay-ms=0' ]),
+        {
+            apply: false,
+            limit: 5,
+            movieId: 'abc',
+            delayMs: 0,
+        },
+    );
+    assert.equal(parseMetadataRefreshArgs([ '--apply' ]).apply, true);
+});
+
+test('metadata refresh CLI rejects invalid numeric arguments', () => {
+    assert.throws(() => parseMetadataRefreshArgs([ '--limit=0' ]), /limit/);
+    assert.throws(() => parseMetadataRefreshArgs([ '--delay-ms=-1' ]), /delay-ms/);
+});
+
+test('metadata refresh dry-run prepares every movie without writing', async () => {
+    let applyCalls = 0;
+    const first = movie();
+    const dependencies = {
+        listMovies: async () => [ first, movie({ id: 'second' }) ],
+        resolve: async () => ({ status: 'matched-by-search' as const, details: details() }),
+        prepare: async () => ({
+            status: 'ready' as const,
+            plan: buildMovieMetadataRefreshPlan(first, details()),
+        }),
+        apply: async () => {
+            applyCalls += 1;
+            return { status: 'updated' as const };
+        },
+        sleep: async () => {},
+        log: () => {},
+    };
+    const report = await runMovieMetadataRefresh(
+        { apply: false, limit: undefined, movieId: undefined, delayMs: 0 },
+        dependencies,
+    );
+
+    assert.equal(applyCalls, 0);
+    assert.equal(report.total, 2);
+    assert.equal(report.ready, 2);
+    assert.equal(report.updated, 0);
+});
+
+test('metadata refresh apply writes prepared movies and counts safe skips', async () => {
+    let applyCalls = 0;
+    const records = [ movie(), movie({ id: 'second' }), movie({ id: 'third' }) ];
+    const dependencies = {
+        listMovies: async () => records,
+        resolve: async (record: RefreshMovieFixture) => record.id === 'third'
+            ? { status: 'not-found' as const }
+            : { status: 'matched-by-id' as const, details: details() },
+        prepare: async (record: RefreshMovieFixture) => record.id === 'second'
+            ? { status: 'duplicate-conflict' as const, duplicateId: 'canonical' }
+            : {
+                status: 'ready' as const,
+                plan: buildMovieMetadataRefreshPlan(record, details()),
+            },
+        apply: async () => {
+            applyCalls += 1;
+            return { status: 'updated' as const };
+        },
+        sleep: async () => {},
+        log: () => {},
+    };
+    const report = await runMovieMetadataRefresh(
+        { apply: true, limit: undefined, movieId: undefined, delayMs: 0 },
+        dependencies,
+    );
+
+    assert.equal(applyCalls, 1);
+    assert.equal(report.updated, 1);
+    assert.equal(report.duplicateConflict, 1);
+    assert.equal(report.notFound, 1);
 });

@@ -22,6 +22,10 @@
   обновляют переданные поля, а пустой/неуспешный cast сохраняет старые credits.
   Здесь же непустой автоматический video snapshot атомарно заменяет
   `MovieVideo`; пустой/неуспешный snapshot ничего не удаляет.
+- `movie-metadata-refresh.ts` — server-only pipeline одноразового массового
+  обновления: строгий match по ID либо kind/year/title, provider fallback,
+  dry-run preparation с dedupe-проверкой и транзакционное сохранение. CLI
+  `scripts/refresh-movie-metadata.ts` никогда не запускается автоматически.
 - `movie-lookup.ts` — `lookupMovieCandidates` параллельно вызывает доступные
   Kinopoisk searches, возвращает легкие candidates и упорядочивает общий список
   с `kinopoisk.dev` как preferred/default. `loadMovieLookupDetails` загружает
@@ -110,6 +114,7 @@ pnpm test:movie-video-thumbnails
 pnpm test:movie-trailers
 pnpm test:loading-ui
 pnpm test:rich-metadata
+pnpm test:metadata-refresh
 pnpm test:people
 pnpm test:movie-form-flow
 pnpm test:movie-navigation-detail

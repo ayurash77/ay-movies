@@ -23,6 +23,8 @@ pnpm db:migrate:dev  # создать и применить миграцию
 pnpm db:generate     # regenerate Prisma client
 pnpm db:seed         # очистить и пересоздать demo data
 pnpm db:studio       # Prisma Studio
+pnpm db:refresh-movie-metadata        # dry-run массового обновления
+pnpm db:refresh-movie-metadata:apply  # применить подготовленные обновления
 ```
 
 Демо-пароль после seed: `demo123`. Demo users включают `demo@ay-movies.dev` и администратора `ayurash@me.com`.
@@ -52,6 +54,13 @@ provider пробуется первым, затем второй Kinopoisk prov
 default-порядок не переопределяет явный выбор пользователя. Токены провайдеров
 остаются только на сервере: не логируй, не сериализуй в браузер и не добавляй в
 примеры env.
+
+Одноразовое массовое обновление запускается только вручную через
+`scripts/refresh-movie-metadata.ts`. Сначала обязательно выполни production
+dry-run без `--apply` и проверь `ambiguous`, `duplicate-conflict` и `failed`.
+Перед `--apply` запусти `sudo systemctl start ayurash-backup.service`. Скрипт
+поддерживает `--limit=N`, `--movie-id=ID` и `--delay-ms=N`; записи без точного
+совпадения kind/year/title не меняются.
 
 ## Архитектура
 
@@ -170,6 +179,7 @@ pnpm test:movie-video-thumbnails
 pnpm test:movie-trailers
 pnpm test:loading-ui
 pnpm test:rich-metadata
+pnpm test:metadata-refresh
 pnpm test:people
 pnpm test:movie-form-flow
 pnpm test:movie-navigation-detail

@@ -37,7 +37,9 @@
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "db:merge-movie-duplicates": "tsx scripts/merge-duplicate-movies.ts --apply"
+    "db:merge-movie-duplicates": "tsx scripts/merge-duplicate-movies.ts --apply",
+    "db:refresh-movie-metadata": "tsx scripts/refresh-movie-metadata.ts",
+    "db:refresh-movie-metadata:apply": "tsx scripts/refresh-movie-metadata.ts --apply"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",
