@@ -44,6 +44,7 @@ function movieToFormDefaults(movie: Awaited<ReturnType<typeof getMovie>>): Parti
         seriesSeasons: movie.seriesSeasons,
         externalRatings: movie.externalRatings,
         cast: movie.cast,
+        videos: movie.videos,
     };
 }
 
@@ -77,6 +78,7 @@ function mergeLookupDefaults(
         seriesSeasons: metadata.seriesSeasons,
         externalRatings: metadata.externalRatings,
         cast: metadata.cast,
+        videos: metadata.videos,
     };
 }
 

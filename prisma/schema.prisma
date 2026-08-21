@@ -67,45 +67,61 @@ model UserFollow {
 }
 
 model Movie {
-  id                 String         @id @default(cuid())
-  kind               MovieKind      @default(MOVIE)
-  dedupeKey          String?        @unique
-  title              String
-  year               Int
-  country            String
-  description        String
-  posterUrl          String?
-  trailerUrls        String[]       @default([])
-  watchLinks         String[]       @default([])
-  director           String?
-  genres             String[]
-  durationMin        Int?
-  seasonsCount       Int?
-  episodesPerSeason  Int[]
-  starring           String[]
-  kinopoiskRating    Float?
-  kinopoiskVotes     Int?
-  imdbRating         Float?
-  imdbVotes          Int?
+  id                    String              @id @default(cuid())
+  kind                  MovieKind           @default(MOVIE)
+  dedupeKey             String?             @unique
+  title                 String
+  year                  Int
+  country               String
+  description           String
+  posterUrl             String?
+  trailerUrls           String[]            @default([])
+  watchLinks            String[]            @default([])
+  director              String?
+  genres                String[]
+  durationMin           Int?
+  seasonsCount          Int?
+  episodesPerSeason     Int[]
+  starring              String[]
+  kinopoiskRating       Float?
+  kinopoiskVotes        Int?
+  imdbRating            Float?
+  imdbVotes             Int?
   russianCriticsPercent Float?
   russianCriticsVotes   Int?
-  metadataProvider   String?
-  metadataExternalId String?
-  metadataUpdatedAt  DateTime?
-  createdById        String?
-  createdBy          User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt          DateTime       @default(now())
-  ratings            Rating[]
-  comments           Comment[]
-  watchEntries       WatchEntry[]
-  notifications      Notification[]
-  seriesSeasons      SeriesSeason[]
-  personCredits      MoviePersonCredit[]
+  metadataProvider      String?
+  metadataExternalId    String?
+  metadataUpdatedAt     DateTime?
+  createdById           String?
+  createdBy             User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt             DateTime            @default(now())
+  ratings               Rating[]
+  comments              Comment[]
+  watchEntries          WatchEntry[]
+  notifications         Notification[]
+  seriesSeasons         SeriesSeason[]
+  personCredits         MoviePersonCredit[]
+  videos                MovieVideo[]
 
   @@index([createdAt])
   @@index([kind, createdAt])
   @@index([kind, year])
   @@index([metadataProvider, metadataExternalId])
+}
+
+model MovieVideo {
+  id       String         @id @default(cuid())
+  movieId  String
+  movie    Movie          @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  provider String
+  site     String
+  title    String
+  kind     MovieVideoKind
+  url      String         @db.VarChar(2048)
+  position Int
+
+  @@unique([movieId, url])
+  @@index([movieId, position])
 }
 
 model Person {
@@ -132,11 +148,11 @@ model Person {
 }
 
 model MoviePersonCredit {
-  id         String @id @default(cuid())
+  id         String  @id @default(cuid())
   movieId    String
-  movie      Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  movie      Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
   personId   String
-  person     Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  person     Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
   profession String
   role       String?
   position   Int
@@ -250,6 +266,11 @@ enum MovieKind {
   MOVIE
   SERIES
   CARTOON
+}
+
+enum MovieVideoKind {
+  TRAILER
+  TEASER
 }
 
 enum ReviewSentiment {

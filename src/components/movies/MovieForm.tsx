@@ -195,6 +195,7 @@ export function MovieForm({
                 seriesSeasons: submitImportedSeriesSnapshot ? defaults?.seriesSeasons : undefined,
                 externalRatings: metadataImportSucceeded ? defaults?.externalRatings : undefined,
                 cast: metadataImportSucceeded ? defaults?.cast : undefined,
+                videos: metadataImportSucceeded ? defaults?.videos : undefined,
             });
         } catch {
             toast.error('Проверьте правильность заполнения полей');

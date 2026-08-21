@@ -68,6 +68,7 @@ function candidateToFormDefaults(
         seriesSeasons: metadata.seriesSeasons,
         externalRatings: metadata.externalRatings,
         cast: metadata.cast,
+        videos: metadata.videos,
     };
 }
 

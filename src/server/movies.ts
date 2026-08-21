@@ -22,6 +22,10 @@ import {
     seriesMetadataSnapshotSchema,
 } from '@/lib/movie-lookup-types';
 import {
+    movieVideoMetadataSchema,
+    movieVideoSnapshotSchema,
+} from '@/lib/movie-videos';
+import {
     metadataImportWriteData,
     normalizeUsableSeriesMetadata,
     seriesSummaryWriteData,
@@ -302,6 +306,7 @@ export const getMovie = createServerFn({ method: 'GET' })
                         },
                     },
                 },
+                videos: { orderBy: { position: 'asc' } },
             },
         });
         if (!movie) return null;
@@ -333,6 +338,10 @@ export const getMovie = createServerFn({ method: 'GET' })
             description: movie.description,
             posterUrl: toServedUploadUrl(movie.posterUrl),
             trailerUrls: movie.trailerUrls,
+            videos: movie.videos.flatMap((video) => {
+                const parsed = movieVideoMetadataSchema.safeParse(video);
+                return parsed.success ? [ parsed.data ] : [];
+            }),
             watchLinks: movie.watchLinks,
             director: movie.director,
             genres: movie.genres,
@@ -448,6 +457,7 @@ export const movieFieldsSchema = z.object({
     seriesSeasons: seriesMetadataSnapshotSchema.optional(),
     externalRatings: externalRatingsSchema.optional(),
     cast: z.array(movieCastMemberSchema).max(100).optional(),
+    videos: movieVideoSnapshotSchema.optional(),
 }).superRefine((data, context) => {
     if (data.metadataExternalId == null) return;
     if (!lookupSourceSchema.safeParse({
@@ -605,6 +615,7 @@ export const createMovie = createServerFn({ method: 'POST' })
                     importSucceeded: data.metadataImportSucceeded === true,
                     externalRatings: data.externalRatings,
                     cast: data.cast,
+                    videos: data.videos,
                 });
                 return created;
             });
@@ -696,6 +707,7 @@ export const updateMovie = createServerFn({ method: 'POST' })
                     importSucceeded: fields.metadataImportSucceeded === true,
                     externalRatings: fields.externalRatings,
                     cast: fields.cast,
+                    videos: fields.videos,
                 });
             });
         } catch (error) {

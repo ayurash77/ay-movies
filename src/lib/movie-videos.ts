@@ -14,7 +14,11 @@ export const movieVideoMetadataSchema = z.object({
     site: z.string().trim().min(1).max(MOVIE_VIDEO_LIMITS.maxSiteLength),
     title: z.string().trim().min(1).max(MOVIE_VIDEO_LIMITS.maxTitleLength),
     kind: movieVideoKindSchema,
-    url: z.string().trim().max(MOVIE_VIDEO_LIMITS.maxUrlLength).url(),
+    url: z.string()
+        .trim()
+        .max(MOVIE_VIDEO_LIMITS.maxUrlLength)
+        .url()
+        .refine((value) => supportedMovieVideoUrl(value) !== null, 'Неподдерживаемая ссылка на видео'),
     position: z.number().int().min(0).max(999),
 });
 

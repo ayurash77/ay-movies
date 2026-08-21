@@ -2,6 +2,8 @@ import type { Prisma } from '@prisma/client';
 
 import type { ExternalRatings, MovieCastMember } from '@/lib/movie-lookup-types';
 import { normalizeCastSnapshot, normalizeExternalRatings } from '@/lib/movie-rich-metadata';
+import type { MovieVideoMetadata } from '@/lib/movie-videos';
+import { normalizeMovieVideoSnapshot } from '@/lib/movie-videos';
 
 type MovieRatingUpdateData = Pick<
     Prisma.MovieUpdateInput,
@@ -54,12 +56,27 @@ export type MovieRichMetadataWriter = {
             }>;
         }): PromiseLike<unknown>;
     };
+    movieVideo: {
+        deleteMany(args: { where: { movieId: string } }): PromiseLike<unknown>;
+        createMany(args: {
+            data: Array<{
+                movieId: string;
+                provider: string;
+                site: string;
+                title: string;
+                kind: 'TRAILER' | 'TEASER';
+                url: string;
+                position: number;
+            }>;
+        }): PromiseLike<unknown>;
+    };
 };
 
 export type MovieRichMetadataSnapshot = {
     importSucceeded: boolean;
     externalRatings?: ExternalRatings;
     cast?: MovieCastMember[];
+    videos?: MovieVideoMetadata[];
 };
 
 function ratingWriteData(value: unknown): MovieRatingUpdateData {
@@ -94,6 +111,14 @@ export async function writeMovieRichMetadata(
     const ratings = ratingWriteData(snapshot.externalRatings);
     if (Object.keys(ratings).length > 0) {
         await tx.movie.update({ where: { id: movieId }, data: ratings });
+    }
+
+    const videos = normalizeMovieVideoSnapshot(snapshot.videos);
+    if (videos.length > 0) {
+        await tx.movieVideo.deleteMany({ where: { movieId } });
+        await tx.movieVideo.createMany({
+            data: videos.map((video) => ({ movieId, ...video })),
+        });
     }
 
     const cast = normalizeCastSnapshot(snapshot.cast);

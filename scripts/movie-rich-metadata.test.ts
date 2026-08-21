@@ -20,6 +20,8 @@ function createWriter() {
         personUpserts: [] as Array<Record<string, unknown>>,
         creditDeletes: [] as Array<Record<string, unknown>>,
         creditCreates: [] as Array<Record<string, unknown>>,
+        videoDeletes: [] as Array<Record<string, unknown>>,
+        videoCreates: [] as Array<{ data: Array<Record<string, unknown>> }>,
     };
     const tx: MovieRichMetadataWriter = {
         movie: {
@@ -45,6 +47,18 @@ function createWriter() {
             createMany: async (args) => {
                 calls.events.push('credit.createMany');
                 calls.creditCreates.push(args);
+                return { count: args.data.length };
+            },
+        },
+        movieVideo: {
+            deleteMany: async (args) => {
+                calls.events.push('video.deleteMany');
+                calls.videoDeletes.push(args);
+                return { count: 0 };
+            },
+            createMany: async (args) => {
+                calls.events.push('video.createMany');
+                calls.videoCreates.push(args);
                 return { count: args.data.length };
             },
         },
@@ -75,6 +89,15 @@ const cast = [
         order: 0,
     },
 ];
+
+const videos = [ {
+    provider: 'kinopoisk-unofficial' as const,
+    site: 'YOUTUBE',
+    title: 'Трейлер',
+    kind: 'TRAILER' as const,
+    url: 'https://www.youtube.com/watch?v=abc123def45',
+    position: 0,
+} ];
 
 test('feature migration drops the temporary review timestamp default and adds refresh attempts', () => {
     const migration = readFileSync(
@@ -130,6 +153,25 @@ test('movie RPC schema enforces provider-specific metadata IDs', () => {
         metadataProvider: 'wikidata',
         metadataExternalId: 'Q42',
     }).success, true);
+});
+
+test('movie RPC schema retains validated automatic video metadata', () => {
+    const fields = movieFieldsSchema.parse({
+        title: 'Фильм',
+        year: 2026,
+        country: 'Россия',
+        description: 'Описание',
+        videos,
+    });
+
+    assert.deepEqual(fields.videos, videos);
+    assert.equal(movieFieldsSchema.safeParse({
+        title: 'Фильм',
+        year: 2026,
+        country: 'Россия',
+        description: 'Описание',
+        videos: [ { ...videos[0], url: 'javascript:alert(1)' } ],
+    }).success, false);
 });
 
 test('normalizes valid ratings and removes invalid score or vote values', () => {
@@ -250,6 +292,40 @@ test('rich metadata writer does nothing after a failed detailed import', async (
     });
 
     assert.deepEqual(calls.events, []);
+});
+
+test('rich metadata writer replaces a non-empty automatic video snapshot', async () => {
+    const { calls, tx } = createWriter();
+
+    await writeMovieRichMetadata(tx, 'movie-1', {
+        importSucceeded: true,
+        videos,
+    });
+
+    assert.deepEqual(calls.videoDeletes, [ { where: { movieId: 'movie-1' } } ]);
+    assert.deepEqual(calls.videoCreates, [ {
+        data: [ {
+            movieId: 'movie-1',
+            provider: 'kinopoisk-unofficial',
+            site: 'YOUTUBE',
+            title: 'Трейлер',
+            kind: 'TRAILER',
+            url: 'https://www.youtube.com/watch?v=abc123def45',
+            position: 0,
+        } ],
+    } ]);
+});
+
+test('empty automatic video refresh preserves the previous snapshot', async () => {
+    const { calls, tx } = createWriter();
+
+    await writeMovieRichMetadata(tx, 'movie-1', {
+        importSucceeded: true,
+        videos: [],
+    });
+
+    assert.deepEqual(calls.videoDeletes, []);
+    assert.deepEqual(calls.videoCreates, []);
 });
 
 test('rich metadata writer updates only non-null rating fields and preserves empty cast', async () => {

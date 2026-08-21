@@ -5,6 +5,7 @@ import type {
     MovieCastMember,
     SeriesSeasonMetadata,
 } from './movie-lookup-types';
+import type { MovieVideoMetadata } from './movie-videos';
 
 export const movieSortOptions = [ 'new', 'rating', 'year', 'title' ] as const;
 export type MovieSort = (typeof movieSortOptions)[number];
@@ -59,6 +60,7 @@ export type MovieDetails = {
     description: string;
     posterUrl: string | null;
     trailerUrls: string[];
+    videos: MovieVideoMetadata[];
     watchLinks: string[];
     director: string | null;
     genres: string[];
@@ -89,6 +91,7 @@ export type MovieFormFields = {
     description: string;
     posterUrl?: string;
     trailerUrls?: string[];
+    videos?: MovieVideoMetadata[];
     watchLinks?: string[];
     director?: string;
     genres?: GenreOption[];
