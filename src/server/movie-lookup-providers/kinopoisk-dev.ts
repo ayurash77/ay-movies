@@ -104,11 +104,13 @@ export type KinopoiskSeason = {
 };
 
 type KinopoiskSearchResponse = { docs?: KinopoiskMovie[] };
+type KinopoiskPersonResponse = { docs?: KinopoiskPersonProfile[] };
 type KinopoiskSeasonResponse = {
     docs?: KinopoiskSeason[];
 };
 
 const DEFAULT_BASE_URL = 'https://api.kinopoisk.dev';
+const CAST_ROLE_BATCH_SIZE = 10;
 
 const rawSummaryIdSchema = z.union([
     z.number().int().positive().refine(Number.isSafeInteger),
@@ -521,6 +523,33 @@ async function loadKinopoiskSeasons(movieId: string) {
     return json?.docs ?? [];
 }
 
+async function loadKinopoiskCastRoles(movieId: string, cast: MovieCastMember[]) {
+    const roleByPersonId = new Map<string, string>();
+    const ids = cast.filter((member) => !member.role).map((member) => member.externalId);
+
+    for (let offset = 0; offset < ids.length; offset += CAST_ROLE_BATCH_SIZE) {
+        const chunk = ids.slice(offset, offset + CAST_ROLE_BATCH_SIZE);
+        const params = new URLSearchParams({ limit: String(chunk.length) });
+        for (const id of chunk) params.append('id', id);
+        for (const field of [ 'id', 'movies' ]) params.append('selectFields', field);
+
+        const response = await kinopoiskJson<KinopoiskPersonResponse>('/v1.4/person', params);
+        if (!response) return null;
+
+        for (const person of response.docs ?? []) {
+            const personId = externalId(person.id);
+            const credit = person.movies?.find((movie) => externalId(movie.id) === movieId);
+            const role = boundedText(credit?.description);
+            if (personId && role) roleByPersonId.set(personId, role);
+        }
+    }
+
+    return cast.map((member) => ({
+        ...member,
+        role: member.role ?? roleByPersonId.get(member.externalId) ?? null,
+    }));
+}
+
 export async function loadKinopoiskPerson(
     personExternalId: string,
 ): Promise<PersonProfileLoadResult | null> {
@@ -603,10 +632,14 @@ export async function loadKinopoiskCandidate(externalId: string): Promise<MovieL
     const candidate = mapKinopoiskMovie(movie, seriesMetadataSummary(seasons).episodesPerSeason);
     if (!candidate) return null;
 
+    const rich = mapKinopoiskRichMetadata(movie);
+    const enrichedCast = await loadKinopoiskCastRoles(movieId, rich.cast);
+
     return movieLookupDetailsSchema.parse({
         ...candidate,
         ...seriesMetadataSummary(seasons),
         seasons,
-        ...mapKinopoiskRichMetadata(movie),
+        ...rich,
+        cast: enrichedCast ?? rich.cast,
     });
 }

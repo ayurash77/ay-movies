@@ -292,6 +292,116 @@ test('kinopoisk rich metadata rejects invalid string person ids', () => {
     }
 });
 
+test('kinopoisk detail enriches cast roles in batches while preserving cast order', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+    const personRequests: URL[] = [];
+    process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+    globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+
+        if (url.pathname === '/v1.4/movie/123') {
+            return Response.json({
+                id: 123,
+                name: 'Тестовый фильм',
+                persons: Array.from({ length: 11 }, (_, index) => ({
+                    id: index + 1,
+                    name: `Актер ${index + 1}`,
+                    enProfession: 'actor',
+                    description: null,
+                })),
+            });
+        }
+        if (url.pathname === '/v1.4/season') return Response.json({ docs: [] });
+        if (url.pathname === '/v1.4/person') {
+            personRequests.push(url);
+            const ids = url.searchParams.getAll('id');
+            return Response.json({
+                docs: ids.reverse().map((id) => ({
+                    id,
+                    name: `Актер ${id}`,
+                    movies: [ {
+                        id: 123,
+                        enProfession: 'actor',
+                        description: `Персонаж ${id}`,
+                    } ],
+                })),
+            });
+        }
+
+        throw new Error(`Unexpected Kinopoisk URL: ${url}`);
+    };
+
+    try {
+        const details = await loadKinopoiskCandidate('123');
+
+        assert.equal(personRequests.length, 2);
+        assert.equal(personRequests[0]?.searchParams.getAll('id').length, 10);
+        assert.equal(personRequests[1]?.searchParams.getAll('id').length, 1);
+        assert.deepEqual(personRequests[0]?.searchParams.getAll('selectFields'), [ 'id', 'movies' ]);
+        assert.deepEqual(personRequests[1]?.searchParams.getAll('selectFields'), [ 'id', 'movies' ]);
+        assert.deepEqual(
+            details?.cast.map(({ externalId, role }) => ({ externalId, role })),
+            Array.from({ length: 11 }, (_, index) => ({
+                externalId: String(index + 1),
+                role: `Персонаж ${index + 1}`,
+            })),
+        );
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+    }
+});
+
+test('kinopoisk detail keeps movie data when cast role enrichment fails', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+    process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+    globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+
+        if (url.pathname === '/v1.4/movie/123') {
+            return Response.json({
+                id: 123,
+                name: 'Тестовый фильм',
+                rating: { kp: 8.1 },
+                votes: { kp: 12 },
+                persons: [ {
+                    id: 1,
+                    name: 'Актер 1',
+                    enProfession: 'actor',
+                    description: null,
+                } ],
+            });
+        }
+        if (url.pathname === '/v1.4/season') return Response.json({ docs: [] });
+        if (url.pathname === '/v1.4/person') return new Response(null, { status: 503 });
+
+        throw new Error(`Unexpected Kinopoisk URL: ${url}`);
+    };
+
+    try {
+        const details = await loadKinopoiskCandidate('123');
+
+        assert.equal(details?.title, 'Тестовый фильм');
+        assert.deepEqual(details?.seasons, []);
+        assert.deepEqual(details?.externalRatings, {
+            kinopoisk: { value: 8.1, votes: 12 },
+            imdb: null,
+            russianCritics: null,
+        });
+        assert.deepEqual(details?.cast.map(({ externalId, role }) => ({ externalId, role })), [ {
+            externalId: '1',
+            role: null,
+        } ]);
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+    }
+});
+
 test('kinopoisk detailed season mapper preserves localized episode metadata', () => {
     assert.deepEqual(mapKinopoiskSeasons([
         {
