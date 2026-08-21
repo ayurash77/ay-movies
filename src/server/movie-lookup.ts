@@ -5,6 +5,7 @@ import { movieKindOptions } from '@/lib/movie-data';
 import {
     lookupSourceSchema,
     movieLookupCandidateSchema,
+    movieLookupDetailsSchema,
     type MovieLookupCandidate,
 } from '@/lib/movie-lookup-types';
 import { resolveMovieLookupDetails } from '@/lib/movie-lookup-details';
@@ -94,13 +95,24 @@ export const loadMovieLookupDetails = createServerFn({ method: 'POST' })
         }
 
         const { loadKinopoiskCandidate } = await import('./movie-lookup-providers/kinopoisk-dev');
-        const { loadKinopoiskUnofficialCandidate } = await import('./movie-lookup-providers/kinopoisk-unofficial');
+        const {
+            loadKinopoiskUnofficialCandidate,
+            loadKinopoiskUnofficialVideos,
+        } = await import('./movie-lookup-providers/kinopoisk-unofficial');
         const loaders = data.provider === 'kinopoisk-unofficial'
             ? [ loadKinopoiskUnofficialCandidate, loadKinopoiskCandidate ]
             : [ loadKinopoiskCandidate, loadKinopoiskUnofficialCandidate ];
 
         const movie = await resolveMovieLookupDetails(data.externalId, loaders);
-        if (movie) return { ok: true as const, movie };
+        if (movie) {
+            const videos = movie.videos.length > 0 || movie.provider === 'kinopoisk-unofficial'
+                ? movie.videos
+                : await loadKinopoiskUnofficialVideos(data.externalId);
+            return {
+                ok: true as const,
+                movie: movieLookupDetailsSchema.parse({ ...movie, videos }),
+            };
+        }
 
         return { ok: false as const, error: 'Не удалось загрузить подробные данные' };
     });

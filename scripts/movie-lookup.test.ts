@@ -807,7 +807,11 @@ test('detail dispatcher continues to fallback after a loader throws', async () =
     assert.equal(result?.kind, 'MOVIE');
 });
 
-function detail(kind: 'MOVIE' | 'SERIES' | 'CARTOON', seasons: MovieLookupDetails['seasons']): MovieLookupDetails {
+function detail(
+    kind: 'MOVIE' | 'SERIES' | 'CARTOON',
+    seasons: MovieLookupDetails['seasons'],
+    videos: MovieLookupDetails['videos'] = [],
+): MovieLookupDetails {
     return movieLookupDetailsSchema.parse({
         found: true,
         provider: 'kinopoisk-dev',
@@ -816,6 +820,7 @@ function detail(kind: 'MOVIE' | 'SERIES' | 'CARTOON', seasons: MovieLookupDetail
         kind,
         title: 'Тест',
         seasons,
+        videos,
     });
 }
 
@@ -889,6 +894,14 @@ test('add and edit metadata application preserve snapshots after a season shell'
             role: null,
             order: 0,
         } ],
+        videos: [ {
+            provider: 'kinopoisk-unofficial' as const,
+            site: 'KINOPOISK_WIDGET',
+            title: 'Старый трейлер',
+            kind: 'TRAILER' as const,
+            url: 'https://widgets.kinopoisk.ru/discovery/trailer/42',
+            position: 0,
+        } ],
     };
     const shell = detail('SERIES', [ { number: 1, episodes: [] } ]);
 
@@ -897,10 +910,30 @@ test('add and edit metadata application preserve snapshots after a season shell'
         seriesSeasons: undefined,
         externalRatings: undefined,
         cast: undefined,
+        videos: undefined,
     });
     assert.deepEqual(movieLookupFormMetadata(shell, previous), {
         metadataImportSucceeded: false,
         ...previous,
+    });
+});
+
+test('successful detail metadata carries automatic videos into the movie form', () => {
+    const videos = [ {
+        provider: 'kinopoisk-unofficial' as const,
+        site: 'YOUTUBE',
+        title: 'Официальный трейлер',
+        kind: 'TRAILER' as const,
+        url: 'https://www.youtube.com/watch?v=abc123def45',
+        position: 0,
+    } ];
+
+    assert.deepEqual(movieLookupFormMetadata(detail('MOVIE', [], videos)), {
+        metadataImportSucceeded: true,
+        seriesSeasons: undefined,
+        externalRatings: undefined,
+        cast: [],
+        videos,
     });
 });
 

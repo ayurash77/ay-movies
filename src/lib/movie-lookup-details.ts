@@ -5,6 +5,7 @@ import type {
     MovieLookupDetails,
     SeriesSeasonMetadata,
 } from './movie-lookup-types';
+import type { MovieVideoMetadata } from './movie-videos';
 import { normalizeUsableSeriesMetadata } from './series-metadata';
 
 export type MovieLookupDetailsLoader = (externalId: string) => Promise<MovieLookupDetails | null>;
@@ -19,6 +20,7 @@ type FormMetadataSnapshot = {
     seriesSeasons?: SeriesSeasonMetadata[];
     externalRatings?: ExternalRatings;
     cast?: MovieCastMember[];
+    videos?: MovieVideoMetadata[];
 };
 
 export function movieLookupFormMetadata(
@@ -31,6 +33,7 @@ export function movieLookupFormMetadata(
             seriesSeasons: current.seriesSeasons,
             externalRatings: current.externalRatings,
             cast: current.cast,
+            videos: current.videos,
         };
     }
 
@@ -41,6 +44,7 @@ export function movieLookupFormMetadata(
             : undefined,
         externalRatings: candidate.externalRatings ?? undefined,
         cast: candidate.cast,
+        videos: candidate.videos,
     };
 }
 

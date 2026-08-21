@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { movieKindOptions } from './movie-data';
+import { movieVideoSnapshotSchema } from './movie-videos';
 
 /** Limits protect direct form submissions as well as provider payloads. */
 export const SERIES_METADATA_LIMITS = {
@@ -181,6 +182,7 @@ export const movieLookupDetailsSchema = movieLookupCandidateSchema.safeExtend({
     seasons: seriesMetadataSnapshotSchema,
     externalRatings: externalRatingsSchema.nullish(),
     cast: z.array(movieCastMemberSchema).max(100).default([]),
+    videos: movieVideoSnapshotSchema.default([]),
 });
 
 export type MovieLookup = z.infer<typeof movieLookupSchema>;

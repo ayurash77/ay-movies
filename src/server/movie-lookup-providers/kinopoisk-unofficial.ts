@@ -7,6 +7,10 @@ import {
     type SeriesSeasonMetadata,
 } from '@/lib/movie-lookup-types';
 import { normalizeSeriesMetadata, seriesMetadataSummary } from '@/lib/series-metadata';
+import {
+    normalizeMovieVideoSnapshot,
+    type MovieVideoMetadata,
+} from '@/lib/movie-videos';
 
 type NameValue = { country?: string | null; genre?: string | null };
 
@@ -54,6 +58,14 @@ export type UnofficialSeason = {
 };
 type SeasonResponse = {
     items?: UnofficialSeason[];
+};
+export type KinopoiskUnofficialVideo = {
+    url?: string | null;
+    name?: string | null;
+    site?: string | null;
+};
+type VideoResponse = {
+    items?: KinopoiskUnofficialVideo[] | null;
 };
 
 const DEFAULT_BASE_URL = 'https://kinopoiskapiunofficial.tech';
@@ -185,6 +197,30 @@ export function mapKinopoiskUnofficialSeasons(input: UnofficialSeason[]): Series
     })));
 }
 
+export function mapKinopoiskUnofficialVideos(
+    items: KinopoiskUnofficialVideo[],
+): MovieVideoMetadata[] {
+    const trailerPattern = /трейлер|trailer/i;
+    const teaserPattern = /тизер|teaser/i;
+
+    return normalizeMovieVideoSnapshot(items.flatMap((item, position) => {
+        const title = text(item.name);
+        const kind = trailerPattern.test(title)
+            ? 'TRAILER' as const
+            : teaserPattern.test(title) ? 'TEASER' as const : null;
+        if (!kind) return [];
+
+        return [ {
+            provider: 'kinopoisk-unofficial' as const,
+            site: text(item.site) || 'UNKNOWN',
+            title,
+            kind,
+            url: text(item.url),
+            position,
+        } ];
+    }));
+}
+
 function getConfig() {
     const token = process.env.KINOPOISK_UNOFFICIAL_TOKEN?.trim();
     if (!token) return null;
@@ -227,6 +263,15 @@ async function loadEpisodesPerSeason(id: string) {
     return json?.items ?? [];
 }
 
+export async function loadKinopoiskUnofficialVideos(
+    externalId: string,
+): Promise<MovieVideoMetadata[]> {
+    const parsedId = kinopoiskExternalIdSchema.safeParse(externalId);
+    if (!parsedId.success) return [];
+    const json = await getJson<VideoResponse>(`/api/v2.2/films/${parsedId.data}/videos`);
+    return mapKinopoiskUnofficialVideos(json?.items ?? []);
+}
+
 export async function lookupKinopoiskUnofficialCandidates(
     title: string,
     kind?: MovieKind,
@@ -247,10 +292,11 @@ export async function loadKinopoiskUnofficialCandidate(externalId: string): Prom
     if (!parsedId.success) return null;
     const id = parsedId.data;
 
-    const [ movie, staff, rawSeasons ] = await Promise.all([
+    const [ movie, staff, rawSeasons, videos ] = await Promise.all([
         loadMovie(id),
         loadStaff(id),
         loadEpisodesPerSeason(id),
+        loadKinopoiskUnofficialVideos(id),
     ]);
     if (!movie) return null;
 
@@ -262,5 +308,6 @@ export async function loadKinopoiskUnofficialCandidate(externalId: string): Prom
         ...candidate,
         ...seriesMetadataSummary(seasons),
         seasons,
+        videos,
     });
 }
