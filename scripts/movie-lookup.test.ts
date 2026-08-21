@@ -925,6 +925,7 @@ test('successful detail metadata carries automatic videos into the movie form', 
         title: 'Официальный трейлер',
         kind: 'TRAILER' as const,
         url: 'https://www.youtube.com/watch?v=abc123def45',
+        thumbnailUrl: null,
         position: 0,
     } ];
 

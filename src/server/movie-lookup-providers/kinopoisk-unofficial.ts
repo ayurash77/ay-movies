@@ -11,6 +11,7 @@ import {
     normalizeMovieVideoSnapshot,
     type MovieVideoMetadata,
 } from '@/lib/movie-videos';
+import { enrichMovieVideoThumbnails } from '@/server/movie-video-thumbnails';
 
 type NameValue = { country?: string | null; genre?: string | null };
 
@@ -269,7 +270,7 @@ export async function loadKinopoiskUnofficialVideos(
     const parsedId = kinopoiskExternalIdSchema.safeParse(externalId);
     if (!parsedId.success) return [];
     const json = await getJson<VideoResponse>(`/api/v2.2/films/${parsedId.data}/videos`);
-    return mapKinopoiskUnofficialVideos(json?.items ?? []);
+    return enrichMovieVideoThumbnails(mapKinopoiskUnofficialVideos(json?.items ?? []));
 }
 
 export async function lookupKinopoiskUnofficialCandidates(
