@@ -155,6 +155,7 @@ export function buildMovieMetadataRefreshPlan(
     const title = nonEmptyText(details.title) ?? current.title;
     const year = details.year ?? current.year;
     const genres = nonEmptyItems(details.genres);
+    const normalizedGenres = genres ? normalizeGenreOptions(genres) : [];
     const starring = nonEmptyItems(details.starring);
     const seriesSeasons = current.kind === 'SERIES'
         ? normalizeUsableSeriesMetadata(details.seasons)
@@ -179,7 +180,7 @@ export function buildMovieMetadataRefreshPlan(
             trailerUrls: [ ...current.trailerUrls ],
             watchLinks: [ ...current.watchLinks ],
             director: nonEmptyText(details.director) ?? current.director,
-            genres: genres ? normalizeGenreOptions(genres) : [ ...current.genres ],
+            genres: normalizedGenres.length > 0 ? normalizedGenres : [ ...current.genres ],
             starring: starring ?? [ ...current.starring ],
             durationMin: details.durationMin ?? current.durationMin,
             seasonsCount: summary.seasonsCount ?? current.seasonsCount,

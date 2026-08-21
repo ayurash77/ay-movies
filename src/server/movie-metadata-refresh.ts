@@ -6,7 +6,7 @@ import {
     type MovieMetadataRefreshPlan,
     type MovieMetadataRefreshRecord,
 } from '@/lib/movie-metadata-refresh';
-import { resolveMovieLookupDetails } from '@/lib/movie-lookup-details';
+import { hasUsableMovieLookupDetails } from '@/lib/movie-lookup-details';
 import {
     lookupSourceSchema,
     type MovieLookupCandidate,
@@ -74,22 +74,48 @@ async function searchKinopoisk(
 }
 
 async function loadKinopoiskDetails(source: KinopoiskRefreshSource) {
-    const loaders = source.provider === 'kinopoisk-unofficial'
-        ? [ loadKinopoiskUnofficialCandidate, loadKinopoiskCandidate ]
-        : [ loadKinopoiskCandidate, loadKinopoiskUnofficialCandidate ];
-    const movie = await resolveMovieLookupDetails(source.externalId, loaders);
+    const [ devResult, unofficialResult ] = await Promise.allSettled([
+        loadKinopoiskCandidate(source.externalId),
+        loadKinopoiskUnofficialCandidate(source.externalId),
+    ]);
+    const kinopoiskDev = devResult.status === 'fulfilled' ? devResult.value : null;
+    const kinopoiskUnofficial = unofficialResult.status === 'fulfilled' ? unofficialResult.value : null;
+    const preferred = source.provider === 'kinopoisk-unofficial'
+        ? kinopoiskUnofficial
+        : kinopoiskDev;
+    const fallback = source.provider === 'kinopoisk-unofficial'
+        ? kinopoiskDev
+        : kinopoiskUnofficial;
+    const movie = [ preferred, fallback ]
+        .find((candidate): candidate is MovieLookupDetails =>
+            Boolean(candidate && hasUsableMovieLookupDetails(candidate)),
+        );
     if (!movie) return null;
 
-    if (movie.videos.length > 0 || movie.provider === 'kinopoisk-unofficial') {
-        return movie;
-    }
+    const merged = mergeKinopoiskRefreshDetails(movie, kinopoiskDev, kinopoiskUnofficial);
+    if (merged.videos.length > 0) return merged;
 
     try {
         const videos = await loadKinopoiskUnofficialVideos(source.externalId);
-        return { ...movie, videos };
+        return { ...merged, videos };
     } catch {
-        return movie;
+        return merged;
     }
+}
+
+export function mergeKinopoiskRefreshDetails(
+    primary: MovieLookupDetails,
+    kinopoiskDev: MovieLookupDetails | null,
+    kinopoiskUnofficial: MovieLookupDetails | null,
+): MovieLookupDetails {
+    return {
+        ...primary,
+        externalRatings: kinopoiskDev?.externalRatings ?? primary.externalRatings,
+        cast: kinopoiskDev?.cast.length ? kinopoiskDev.cast : primary.cast,
+        videos: kinopoiskUnofficial?.videos.length
+            ? kinopoiskUnofficial.videos
+            : primary.videos,
+    };
 }
 
 const productionDependencies: MovieMetadataRefreshDependencies = {
@@ -101,7 +127,10 @@ function matchingDetails(
     movie: MovieMetadataRefreshRecord,
     details: MovieLookupDetails | null,
 ) {
-    return details?.kind === movie.kind ? details : null;
+    if (!details) return null;
+    return selectExactMetadataCandidate(movie, [ details ]).status === 'matched'
+        ? details
+        : null;
 }
 
 export async function resolveMovieMetadataRefresh(
@@ -112,9 +141,7 @@ export async function resolveMovieMetadataRefresh(
         const savedSource = savedKinopoiskSource(movie);
         if (savedSource) {
             const details = matchingDetails(movie, await dependencies.load(savedSource));
-            return details
-                ? { status: 'matched-by-id', details }
-                : { status: 'failed', reason: 'saved-source-details-unavailable' };
+            if (details) return { status: 'matched-by-id', details };
         }
 
         const selection = selectExactMetadataCandidate(
@@ -159,18 +186,31 @@ export async function applyMovieMetadataRefresh(
 ) {
     const { plan } = prepared;
     await db.$transaction(async (tx) => {
+        const {
+            posterUrl,
+            trailerUrls: _trailerUrls,
+            watchLinks: _watchLinks,
+            ...providerMovieData
+        } = plan.movie;
+        if (posterUrl !== movie.posterUrl) {
+            await tx.movie.updateMany({
+                where: { id: movie.id, posterUrl: movie.posterUrl },
+                data: { posterUrl },
+            });
+        }
+
         if (movie.kind !== 'SERIES') {
             await tx.seriesSeason.deleteMany({ where: { movieId: movie.id } });
             await tx.movie.update({
                 where: { id: movie.id },
-                data: plan.movie,
+                data: providerMovieData,
             });
         } else if (plan.seriesSeasons.length > 0) {
             await tx.seriesSeason.deleteMany({ where: { movieId: movie.id } });
             await tx.movie.update({
                 where: { id: movie.id },
                 data: {
-                    ...plan.movie,
+                    ...providerMovieData,
                     seriesSeasons: {
                         create: seriesSnapshotWriteData(plan.seriesSeasons),
                     },
@@ -179,7 +219,7 @@ export async function applyMovieMetadataRefresh(
         } else {
             await tx.movie.update({
                 where: { id: movie.id },
-                data: plan.movie,
+                data: providerMovieData,
             });
         }
 
@@ -189,7 +229,7 @@ export async function applyMovieMetadataRefresh(
             cast: plan.cast,
             videos: plan.videos,
         });
-    });
+    }, { timeout: 60_000 });
 
     return { status: 'updated' as const };
 }
