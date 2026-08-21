@@ -110,15 +110,16 @@ model Movie {
 }
 
 model MovieVideo {
-  id       String         @id @default(cuid())
-  movieId  String
-  movie    Movie          @relation(fields: [movieId], references: [id], onDelete: Cascade)
-  provider String
-  site     String
-  title    String
-  kind     MovieVideoKind
-  url      String         @db.VarChar(2048)
-  position Int
+  id           String         @id @default(cuid())
+  movieId      String
+  movie        Movie          @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  provider     String
+  site         String
+  title        String
+  kind         MovieVideoKind
+  url          String         @db.VarChar(2048)
+  thumbnailUrl String?        @db.VarChar(2048)
+  position     Int
 
   @@unique([movieId, url])
   @@index([movieId, position])

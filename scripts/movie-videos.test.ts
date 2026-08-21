@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import * as movieVideoModule from '../src/lib/movie-videos';
 import {
     mergeMovieVideoSources,
     movieVideoEmbedUrl,
@@ -103,6 +104,32 @@ test('normalizer canonicalizes duplicate YouTube URLs and reassigns positions', 
         { title: 'Первый трейлер', position: 0 },
         { title: 'Второй трейлер', position: 1 },
     ]);
+});
+
+test('derives a stable YouTube thumbnail and keeps a valid snapshot thumbnail', () => {
+    const youtubeMovieVideoThumbnail = (
+        movieVideoModule as unknown as {
+            youtubeMovieVideoThumbnail?: (value: string) => string | null;
+        }
+    ).youtubeMovieVideoThumbnail;
+
+    assert.equal(typeof youtubeMovieVideoThumbnail, 'function');
+    assert.equal(
+        youtubeMovieVideoThumbnail?.('https://youtu.be/abc123def45'),
+        'https://i.ytimg.com/vi/abc123def45/hqdefault.jpg',
+    );
+    assert.equal(youtubeMovieVideoThumbnail?.('https://vimeo.com/123456'), null);
+
+    const [ video ] = normalizeMovieVideoSnapshot([ {
+        provider: 'kinopoisk-unofficial',
+        site: 'YOUTUBE',
+        title: 'Трейлер',
+        kind: 'TRAILER',
+        url: 'https://www.youtube.com/watch?v=abc123def45',
+        thumbnailUrl: 'https://i.ytimg.com/vi/abc123def45/hqdefault.jpg',
+        position: 0,
+    } ]);
+    assert.equal(video?.thumbnailUrl, 'https://i.ytimg.com/vi/abc123def45/hqdefault.jpg');
 });
 
 test('video snapshot schema enforces the provider item limit', () => {

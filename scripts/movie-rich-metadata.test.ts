@@ -96,6 +96,7 @@ const videos = [ {
     title: 'Трейлер',
     kind: 'TRAILER' as const,
     url: 'https://www.youtube.com/watch?v=abc123def45',
+    thumbnailUrl: 'https://i.ytimg.com/vi/abc123def45/hqdefault.jpg',
     position: 0,
 } ];
 
@@ -311,6 +312,7 @@ test('rich metadata writer replaces a non-empty automatic video snapshot', async
             title: 'Трейлер',
             kind: 'TRAILER',
             url: 'https://www.youtube.com/watch?v=abc123def45',
+            thumbnailUrl: 'https://i.ytimg.com/vi/abc123def45/hqdefault.jpg',
             position: 0,
         } ],
     } ]);

@@ -66,6 +66,7 @@ export type MovieRichMetadataWriter = {
                 title: string;
                 kind: 'TRAILER' | 'TEASER';
                 url: string;
+                thumbnailUrl: string | null;
                 position: number;
             }>;
         }): PromiseLike<unknown>;

@@ -19,6 +19,14 @@ export const movieVideoMetadataSchema = z.object({
         .max(MOVIE_VIDEO_LIMITS.maxUrlLength)
         .url()
         .refine((value) => supportedMovieVideoUrl(value) !== null, 'Неподдерживаемая ссылка на видео'),
+    thumbnailUrl: z.string()
+        .trim()
+        .max(MOVIE_VIDEO_LIMITS.maxUrlLength)
+        .url()
+        .refine((value) => new URL(value).protocol === 'https:', 'Превью должно использовать HTTPS')
+        .nullable()
+        .optional()
+        .transform((value) => value ?? null),
     position: z.number().int().min(0).max(999),
 });
 
@@ -29,7 +37,7 @@ export type MovieVideoMetadata = z.infer<typeof movieVideoMetadataSchema>;
 
 export type DisplayMovieVideo = Pick<
     MovieVideoMetadata,
-    'site' | 'title' | 'kind' | 'url' | 'position'
+    'site' | 'title' | 'kind' | 'url' | 'thumbnailUrl' | 'position'
 > & {
     origin: 'automatic' | 'manual';
     sourceLabel: string;
@@ -87,6 +95,13 @@ export function supportedMovieVideoUrl(value: string): SupportedVideoUrl | null 
     }
 
     return null;
+}
+
+export function youtubeMovieVideoThumbnail(value: string) {
+    const supported = supportedMovieVideoUrl(value);
+    return supported?.key.startsWith('youtube:')
+        ? `https://i.ytimg.com/vi/${supported.key.slice('youtube:'.length)}/hqdefault.jpg`
+        : null;
 }
 
 export function normalizeMovieVideoSnapshot(value: unknown): MovieVideoMetadata[] {
@@ -161,6 +176,7 @@ export function mergeMovieVideoSources(
             title: video.title,
             kind: video.kind,
             url: video.url,
+            thumbnailUrl: video.thumbnailUrl ?? youtubeMovieVideoThumbnail(video.url),
             position: merged.length,
             origin: 'automatic',
             sourceLabel: videoSourceLabel(video.url, video.site),
@@ -179,6 +195,7 @@ export function mergeMovieVideoSources(
             title: `Трейлер ${manualPosition}`,
             kind: 'TRAILER',
             url,
+            thumbnailUrl: youtubeMovieVideoThumbnail(url),
             position: merged.length,
             origin: 'manual',
             sourceLabel: videoSourceLabel(url),
