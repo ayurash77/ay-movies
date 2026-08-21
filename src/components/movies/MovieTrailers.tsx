@@ -16,29 +16,30 @@ import { cn } from '@/lib/utils';
 
 type MovieTrailersProps = {
     title: string;
-    posterUrl: string | null;
     automaticVideos: MovieVideoMetadata[];
     manualUrls: string[];
 };
 
 type VideoCardProps = {
     video: DisplayMovieVideo;
-    posterUrl: string | null;
     className?: string;
     onSelect: (video: DisplayMovieVideo) => void;
 };
 
-function VideoVisual({ posterUrl, title }: { posterUrl: string | null; title: string }) {
+function VideoVisual({ thumbnailUrl, title }: { thumbnailUrl: string | null; title: string }) {
     return (
         <div className="relative aspect-video overflow-hidden bg-muted">
             <ProgressiveImage
-                src={posterUrl ?? undefined}
+                src={thumbnailUrl ?? undefined}
                 alt=""
                 loading="lazy"
                 wrapperClassName="absolute inset-0"
                 className="object-cover"
                 fallback={(
-                    <div className="flex size-full items-center justify-center text-muted-foreground">
+                    <div
+                        data-testid="video-thumbnail-fallback"
+                        className="flex size-full items-center justify-center text-muted-foreground"
+                    >
                         <Film className="size-10" aria-hidden="true"/>
                     </div>
                 )}
@@ -55,10 +56,10 @@ function VideoVisual({ posterUrl, title }: { posterUrl: string | null; title: st
     );
 }
 
-function VideoCard({ video, posterUrl, className, onSelect }: VideoCardProps) {
+function VideoCard({ video, className, onSelect }: VideoCardProps) {
     const content = (
         <>
-            <VideoVisual posterUrl={posterUrl} title={video.title}/>
+            <VideoVisual thumbnailUrl={video.thumbnailUrl} title={video.title}/>
             <span className="flex min-w-0 flex-col gap-0.5 p-3 text-left">
                 <span className="line-clamp-2 text-sm font-medium leading-snug">{video.title}</span>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -101,7 +102,6 @@ function VideoCard({ video, posterUrl, className, onSelect }: VideoCardProps) {
 
 export function MovieTrailers({
     title,
-    posterUrl,
     automaticVideos,
     manualUrls,
 }: MovieTrailersProps) {
@@ -140,7 +140,6 @@ export function MovieTrailers({
                     <VideoCard
                         key={`${video.origin}-${video.url}`}
                         video={video}
-                        posterUrl={posterUrl}
                         onSelect={selectVideo}
                     />
                 ))}
@@ -159,7 +158,6 @@ export function MovieTrailers({
                             <VideoCard
                                 key={`${video.origin}-${video.url}`}
                                 video={video}
-                                posterUrl={posterUrl}
                                 className="w-full sm:w-full"
                                 onSelect={selectVideo}
                             />

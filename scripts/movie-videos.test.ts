@@ -152,6 +152,7 @@ test('automatic videos precede deduplicated manual links', () => {
         title: 'Официальный трейлер',
         kind: 'TRAILER' as const,
         url: 'https://www.youtube.com/watch?v=abc123def45',
+        thumbnailUrl: null,
         position: 0,
     } ];
 

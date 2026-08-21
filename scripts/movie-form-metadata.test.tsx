@@ -32,6 +32,7 @@ const videos = [ {
     title: 'Официальный трейлер',
     kind: 'TRAILER' as const,
     url: 'https://widgets.kinopoisk.ru/discovery/trailer/42',
+    thumbnailUrl: null,
     position: 0,
 } ];
 

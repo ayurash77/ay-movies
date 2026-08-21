@@ -33,21 +33,58 @@ test.before(async () => {
 
 test.afterEach(() => cleanup());
 
-function automaticVideo(position: number): MovieVideoMetadata {
+function automaticVideo(
+    position: number,
+    thumbnailUrl: string | null = `https://example.com/trailer-${position}.jpg`,
+    url = `https://www.youtube.com/watch?v=video${position}id`,
+): MovieVideoMetadata {
     return {
         provider: 'kinopoisk-unofficial',
         site: 'YOUTUBE',
         title: `Трейлер ${position + 1}`,
         kind: position % 2 === 0 ? 'TRAILER' : 'TEASER',
-        url: `https://www.youtube.com/watch?v=video${position}id`,
+        url,
+        thumbnailUrl,
         position,
     };
 }
 
+test('trailer cards use individual video thumbnails instead of the movie poster', () => {
+    const view = render(createElement(MovieTrailers, {
+        title: 'Фильм',
+        automaticVideos: [ automaticVideo(1), automaticVideo(2) ],
+        manualUrls: [],
+    }));
+
+    assert.deepEqual(
+        Array.from(view.container.querySelectorAll('img'))
+            .map((image) => image.getAttribute('src'))
+            .sort(),
+        [
+            'https://example.com/trailer-1.jpg',
+            'https://example.com/trailer-2.jpg',
+        ].sort(),
+    );
+});
+
+test('missing trailer thumbnail uses a neutral fallback instead of the movie poster', () => {
+    const view = render(createElement(MovieTrailers, {
+        title: 'Фильм',
+        automaticVideos: [ automaticVideo(
+            1,
+            null,
+            'https://widgets.kinopoisk.ru/discovery/trailer/42',
+        ) ],
+        manualUrls: [],
+    }));
+
+    assert.equal(view.container.querySelector('img'), null);
+    assert.ok(view.getByTestId('video-thumbnail-fallback'));
+});
+
 test('trailer gallery creates a player only after selection and removes it on close', async () => {
     const view = render(createElement(MovieTrailers, {
         title: 'Фильм',
-        posterUrl: 'https://example.com/poster.jpg',
         automaticVideos: Array.from({ length: 6 }, (_, index) => automaticVideo(index)),
         manualUrls: [],
     }));
@@ -67,7 +104,6 @@ test('trailer gallery creates a player only after selection and removes it on cl
 test('all action reveals videos beyond the compact preview', async () => {
     const view = render(createElement(MovieTrailers, {
         title: 'Фильм',
-        posterUrl: null,
         automaticVideos: Array.from({ length: 6 }, (_, index) => automaticVideo(index)),
         manualUrls: [],
     }));
@@ -82,7 +118,6 @@ test('all action reveals videos beyond the compact preview', async () => {
 test('unsupported manual video remains an external link', () => {
     const view = render(createElement(MovieTrailers, {
         title: 'Фильм',
-        posterUrl: null,
         automaticVideos: [],
         manualUrls: [ 'https://example.com/trailer' ],
     }));

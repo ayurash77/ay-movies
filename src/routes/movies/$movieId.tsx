@@ -75,7 +75,6 @@ function AboutSection({ movie, reviews, isAuthed, onRate }: {
         <div className="flex flex-col gap-6">
             <MovieTrailers
                 title={movie.title}
-                posterUrl={movie.posterUrl}
                 automaticVideos={movie.videos}
                 manualUrls={movie.trailerUrls}
             />
