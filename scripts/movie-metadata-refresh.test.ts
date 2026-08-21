@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { PrismaClient } from '@prisma/client';
 
 import {
     buildMovieMetadataRefreshPlan,
@@ -12,6 +13,11 @@ import type {
     MovieLookupDetails,
     SeriesSeasonMetadata,
 } from '../src/lib/movie-lookup-types';
+import {
+    applyMovieMetadataRefresh,
+    prepareMovieMetadataRefresh,
+    resolveMovieMetadataRefresh,
+} from '../src/server/movie-metadata-refresh';
 
 const usableSeasons: SeriesSeasonMetadata[] = [ {
     number: 1,
@@ -238,4 +244,124 @@ test('refresh plan preserves existing series summary when details have no episod
     assert.equal(plan.seriesSeasons.length, 0);
     assert.equal(plan.movie.seasonsCount, 4);
     assert.deepEqual(plan.movie.episodesPerSeason, [ 8, 8, 8, 8 ]);
+});
+
+test('metadata refresh loads a saved Kinopoisk id without title search', async () => {
+    let searches = 0;
+    const result = await resolveMovieMetadataRefresh(
+        movie({ metadataProvider: 'kinopoisk-dev', metadataExternalId: '573209' }),
+        {
+            search: async () => {
+                searches += 1;
+                return [];
+            },
+            load: async () => details({ externalId: '573209' }),
+        },
+    );
+
+    assert.equal(searches, 0);
+    assert.equal(result.status, 'matched-by-id');
+});
+
+test('metadata refresh searches records without a Kinopoisk id', async () => {
+    let loadedId = '';
+    const result = await resolveMovieMetadataRefresh(movie(), {
+        search: async () => [ candidate() ],
+        load: async (source) => {
+            loadedId = source.externalId;
+            return details();
+        },
+    });
+
+    assert.equal(result.status, 'matched-by-search');
+    assert.equal(loadedId, '573209');
+});
+
+test('metadata refresh preserves ambiguous search result without loading details', async () => {
+    let loads = 0;
+    const result = await resolveMovieMetadataRefresh(movie(), {
+        search: async () => [ candidate({ externalId: '1' }), candidate({ externalId: '2' }) ],
+        load: async () => {
+            loads += 1;
+            return details();
+        },
+    });
+
+    assert.equal(result.status, 'ambiguous');
+    assert.equal(loads, 0);
+});
+
+test('metadata refresh reports provider failures without throwing', async () => {
+    const result = await resolveMovieMetadataRefresh(movie(), {
+        search: async () => {
+            throw new Error('provider unavailable');
+        },
+        load: async () => details(),
+    });
+
+    assert.deepEqual(result, { status: 'failed', reason: 'provider-error' });
+});
+
+function createPersistenceFake(duplicateId: string | null = null) {
+    const calls = { transactions: 0, seriesDeleteMany: 0, movieUpdate: 0 };
+    const tx = {
+        seriesSeason: {
+            deleteMany: async () => {
+                calls.seriesDeleteMany += 1;
+            },
+        },
+        movie: {
+            update: async () => {
+                calls.movieUpdate += 1;
+            },
+        },
+        person: { upsert: async () => ({ id: 'person-1' }) },
+        moviePersonCredit: { deleteMany: async () => {}, createMany: async () => {} },
+        movieVideo: { deleteMany: async () => {}, createMany: async () => {} },
+    };
+    const client = {
+        movie: {
+            findUnique: async () => duplicateId ? { id: duplicateId } : null,
+        },
+        $transaction: async <T>(run: (transaction: typeof tx) => Promise<T>) => {
+            calls.transactions += 1;
+            return run(tx);
+        },
+    } as unknown as PrismaClient;
+
+    return { calls, client };
+}
+
+test('metadata refresh preparation reports a dedupe conflict before a transaction', async () => {
+    const db = createPersistenceFake('other');
+    const result = await prepareMovieMetadataRefresh(db.client, movie(), details());
+
+    assert.deepEqual(result, { status: 'duplicate-conflict', duplicateId: 'other' });
+    assert.equal(db.calls.transactions, 0);
+});
+
+test('metadata refresh apply replaces a non-empty series snapshot transactionally', async () => {
+    const db = createPersistenceFake();
+    const current = movie({
+        kind: 'SERIES',
+        seasonsCount: 4,
+        episodesPerSeason: [ 8, 8, 8, 8 ],
+    });
+    const refreshed = details({
+        kind: 'SERIES',
+        seasons: usableSeasons,
+        seasonsCount: 1,
+        episodesPerSeason: [ 2 ],
+    });
+    const prepared = await prepareMovieMetadataRefresh(db.client, current, refreshed);
+
+    assert.equal(prepared.status, 'ready');
+    if (prepared.status !== 'ready') return;
+
+    const result = await applyMovieMetadataRefresh(db.client, current, prepared);
+
+    assert.deepEqual(result, { status: 'updated' });
+    assert.equal(db.calls.transactions, 1);
+    assert.equal(db.calls.seriesDeleteMany, 1);
+    assert.equal(db.calls.movieUpdate, 1);
 });
