@@ -13,6 +13,7 @@ import {
     type MovieMetadataRefreshResolution,
     type PreparedMovieMetadataRefresh,
 } from '../src/server/movie-metadata-refresh';
+import { isMovieLookupQuotaError } from '../src/server/movie-lookup-provider-errors';
 
 export type MetadataRefreshOptions = {
     apply: boolean;
@@ -158,6 +159,12 @@ export async function runMovieMetadataRefresh(
             report.updated += 1;
             dependencies.log(`updated: ${label}; source=${details.provider}:${details.externalId}`);
         } catch (error) {
+            if (isMovieLookupQuotaError(error)) {
+                dependencies.log(
+                    `quota-exhausted: provider=${error.provider}; status=${error.status}; stopped-after=${report.total}`,
+                );
+                throw error;
+            }
             report.failed += 1;
             const reason = error instanceof Error
                 ? `runtime-${error.name.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}`

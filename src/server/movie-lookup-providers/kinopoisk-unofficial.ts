@@ -12,6 +12,7 @@ import {
     type MovieVideoMetadata,
 } from '@/lib/movie-videos';
 import { enrichMovieVideoThumbnails } from '@/server/movie-video-thumbnails';
+import { MovieLookupQuotaError } from '@/server/movie-lookup-provider-errors';
 
 type NameValue = { country?: string | null; genre?: string | null };
 
@@ -231,7 +232,11 @@ function getConfig() {
     };
 }
 
-async function getJson<T>(path: string, params?: URLSearchParams): Promise<T | null> {
+async function getJson<T>(
+    path: string,
+    params?: URLSearchParams,
+    strict = false,
+): Promise<T | null> {
     const config = getConfig();
     if (!config) return null;
     const query = params ? `?${params}` : '';
@@ -244,9 +249,16 @@ async function getJson<T>(path: string, params?: URLSearchParams): Promise<T | n
                 'X-API-KEY': config.token,
             },
         });
-        if (!res.ok) return null;
+        if (!res.ok) {
+            if (strict && [ 402, 403, 429 ].includes(res.status)) {
+                throw new MovieLookupQuotaError('kinopoisk-unofficial', res.status);
+            }
+            if (strict) throw new Error(`kinopoisk-unofficial HTTP ${res.status}`);
+            return null;
+        }
         return (await res.json()) as T;
-    } catch {
+    } catch (error) {
+        if (strict) throw error;
         return null;
     }
 }
@@ -264,12 +276,28 @@ async function loadEpisodesPerSeason(id: string) {
     return json?.items ?? [];
 }
 
+export async function loadKinopoiskUnofficialRefreshSeasons(externalId: string) {
+    const parsedId = kinopoiskExternalIdSchema.safeParse(externalId);
+    if (!parsedId.success) return [];
+    const json = await getJson<SeasonResponse>(
+        `/api/v2.2/films/${parsedId.data}/seasons`,
+        undefined,
+        true,
+    );
+    return mapKinopoiskUnofficialSeasons(json?.items ?? []);
+}
+
 export async function loadKinopoiskUnofficialVideos(
     externalId: string,
+    options: { throwOnProviderError?: boolean } = {},
 ): Promise<MovieVideoMetadata[]> {
     const parsedId = kinopoiskExternalIdSchema.safeParse(externalId);
     if (!parsedId.success) return [];
-    const json = await getJson<VideoResponse>(`/api/v2.2/films/${parsedId.data}/videos`);
+    const json = await getJson<VideoResponse>(
+        `/api/v2.2/films/${parsedId.data}/videos`,
+        undefined,
+        options.throwOnProviderError,
+    );
     return enrichMovieVideoThumbnails(mapKinopoiskUnofficialVideos(json?.items ?? []));
 }
 

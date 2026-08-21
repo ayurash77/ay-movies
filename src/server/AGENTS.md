@@ -26,6 +26,12 @@
   обновления: строгий match по ID либо kind/year/title, provider fallback,
   dry-run preparation с dedupe-проверкой и транзакционное сохранение. CLI
   `scripts/refresh-movie-metadata.ts` никогда не запускается автоматически.
+  Bulk search повторно использует rich payload `kinopoisk.dev`, поэтому не
+  загружает ту же карточку второй раз; сезоны запрашиваются только для сериалов
+  через Unofficial API, видео — еще одним Unofficial-запросом. Это удерживает
+  текущий каталог в пределах 200 Dev и 500 Unofficial запросов.
+  `MovieLookupQuotaError` для HTTP
+  402/403/429 должен прерывать job, а не превращаться в пустой результат.
 - `movie-lookup.ts` — `lookupMovieCandidates` параллельно вызывает доступные
   Kinopoisk searches, возвращает легкие candidates и упорядочивает общий список
   с `kinopoisk.dev` как preferred/default. `loadMovieLookupDetails` загружает

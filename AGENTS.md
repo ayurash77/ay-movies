@@ -60,7 +60,11 @@ default-порядок не переопределяет явный выбор �
 dry-run без `--apply` и проверь `ambiguous`, `duplicate-conflict` и `failed`.
 Перед `--apply` запусти `sudo systemctl start ayurash-backup.service`. Скрипт
 поддерживает `--limit=N`, `--movie-id=ID` и `--delay-ms=N`; записи без точного
-совпадения kind/year/title не меняются.
+совпадения kind/year/title не меняются. Bulk-путь использует полный ответ одного
+поиска `kinopoisk.dev`, а сезоны только для сериалов и видео запрашивает из
+Kinopoisk Unofficial. Для текущих 169 записей это максимум 169 Dev и 233
+Unofficial API-запроса. Ошибки квоты HTTP 402/403/429 немедленно останавливают
+job и не маскируются как `not-found`.
 
 ## Архитектура
 

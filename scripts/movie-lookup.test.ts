@@ -18,6 +18,7 @@ import {
     resolveMovieLookupDetails,
 } from '../src/lib/movie-lookup-details';
 import {
+    lookupKinopoiskRefreshCandidates,
     mapKinopoiskMovie,
     mapKinopoiskRichMetadata,
     mapKinopoiskSeasons,
@@ -27,7 +28,9 @@ import {
     mapKinopoiskUnofficialMovie,
     mapKinopoiskUnofficialSeasons,
     loadKinopoiskUnofficialCandidate,
+    loadKinopoiskUnofficialVideos,
 } from '../src/server/movie-lookup-providers/kinopoisk-unofficial';
+import { MovieLookupQuotaError } from '../src/server/movie-lookup-provider-errors';
 import {
     buildLookupAttempts,
     claimSeriesInfo,
@@ -289,6 +292,86 @@ test('kinopoisk rich metadata rejects invalid string person ids', () => {
         });
 
         assert.deepEqual(rich.cast, [], `person id ${id} must be rejected`);
+    }
+});
+
+test('bulk Kinopoisk search returns rich details in one request', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+    const requests: URL[] = [];
+    process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+    globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+        requests.push(url);
+        return Response.json({
+            docs: [ {
+                id: 123,
+                name: 'Игра престолов',
+                alternativeName: 'Game of Thrones',
+                type: 'tv-series',
+                year: 2011,
+                rating: { kp: 9, imdb: 9.2 },
+                votes: { kp: 1_500_000, imdb: 2_000_000 },
+                persons: [ {
+                    id: 42,
+                    name: 'Питер Динклэйдж',
+                    enName: 'Peter Dinklage',
+                    enProfession: 'actor',
+                    description: 'Тирион Ланнистер',
+                } ],
+            } ],
+        });
+    };
+
+    try {
+        const results = await lookupKinopoiskRefreshCandidates('Игра престолов', 'SERIES');
+
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0]?.pathname, '/v1.4/movie/search');
+        assert.equal(requests[0]?.searchParams.get('limit'), '10');
+        assert.equal(results[0]?.externalRatings?.kinopoisk?.value, 9);
+        assert.equal(results[0]?.cast[0]?.role, 'Тирион Ланнистер');
+        assert.deepEqual(results[0]?.seasons, []);
+        assert.deepEqual(results[0]?.videos, []);
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+    }
+});
+
+test('bulk provider requests expose quota errors instead of returning empty data', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousDevToken = process.env.KINOPOISK_DEV_TOKEN;
+    const previousUnofficialToken = process.env.KINOPOISK_UNOFFICIAL_TOKEN;
+    process.env.KINOPOISK_DEV_TOKEN = 'dev-token';
+    process.env.KINOPOISK_UNOFFICIAL_TOKEN = 'unofficial-token';
+    globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+        return new Response(null, {
+            status: url.hostname === 'api.kinopoisk.dev' ? 403 : 402,
+        });
+    };
+
+    try {
+        await assert.rejects(
+            lookupKinopoiskRefreshCandidates('Сенна', 'MOVIE'),
+            (error: unknown) => error instanceof MovieLookupQuotaError
+                && error.provider === 'kinopoisk-dev'
+                && error.status === 403,
+        );
+        await assert.rejects(
+            loadKinopoiskUnofficialVideos('573209', { throwOnProviderError: true }),
+            (error: unknown) => error instanceof MovieLookupQuotaError
+                && error.provider === 'kinopoisk-unofficial'
+                && error.status === 402,
+        );
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousDevToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousDevToken;
+        if (previousUnofficialToken === undefined) delete process.env.KINOPOISK_UNOFFICIAL_TOKEN;
+        else process.env.KINOPOISK_UNOFFICIAL_TOKEN = previousUnofficialToken;
     }
 });
 

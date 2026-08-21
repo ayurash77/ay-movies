@@ -8,20 +8,21 @@ import {
 } from '@/lib/movie-metadata-refresh';
 import { hasUsableMovieLookupDetails } from '@/lib/movie-lookup-details';
 import {
+    movieLookupDetailsSchema,
     lookupSourceSchema,
     type MovieLookupCandidate,
     type MovieLookupDetails,
 } from '@/lib/movie-lookup-types';
-import { seriesSnapshotWriteData } from '@/lib/series-metadata';
+import { seriesMetadataSummary, seriesSnapshotWriteData } from '@/lib/series-metadata';
 import { writeMovieRichMetadata } from './movie-rich-metadata';
+import { isMovieLookupQuotaError } from './movie-lookup-provider-errors';
 import {
-    loadKinopoiskCandidate,
-    lookupKinopoiskCandidates,
+    loadKinopoiskRefreshCandidate,
+    lookupKinopoiskRefreshCandidates,
 } from './movie-lookup-providers/kinopoisk-dev';
 import {
-    loadKinopoiskUnofficialCandidate,
+    loadKinopoiskUnofficialRefreshSeasons,
     loadKinopoiskUnofficialVideos,
-    lookupKinopoiskUnofficialCandidates,
 } from './movie-lookup-providers/kinopoisk-unofficial';
 
 export type KinopoiskRefreshSource = {
@@ -62,47 +63,6 @@ function savedKinopoiskSource(movie: MovieMetadataRefreshRecord): KinopoiskRefre
     return source.data;
 }
 
-async function searchKinopoisk(
-    title: string,
-    kind: MovieMetadataRefreshRecord['kind'],
-) {
-    const [ kinopoiskDev, kinopoiskUnofficial ] = await Promise.all([
-        lookupKinopoiskCandidates(title, kind),
-        lookupKinopoiskUnofficialCandidates(title, kind),
-    ]);
-    return [ ...kinopoiskDev, ...kinopoiskUnofficial ];
-}
-
-async function loadKinopoiskDetails(source: KinopoiskRefreshSource) {
-    const [ devResult, unofficialResult ] = await Promise.allSettled([
-        loadKinopoiskCandidate(source.externalId),
-        loadKinopoiskUnofficialCandidate(source.externalId),
-    ]);
-    const kinopoiskDev = devResult.status === 'fulfilled' ? devResult.value : null;
-    const kinopoiskUnofficial = unofficialResult.status === 'fulfilled' ? unofficialResult.value : null;
-    const preferred = source.provider === 'kinopoisk-unofficial'
-        ? kinopoiskUnofficial
-        : kinopoiskDev;
-    const fallback = source.provider === 'kinopoisk-unofficial'
-        ? kinopoiskDev
-        : kinopoiskUnofficial;
-    const movie = [ preferred, fallback ]
-        .find((candidate): candidate is MovieLookupDetails =>
-            Boolean(candidate && hasUsableMovieLookupDetails(candidate)),
-        );
-    if (!movie) return null;
-
-    const merged = mergeKinopoiskRefreshDetails(movie, kinopoiskDev, kinopoiskUnofficial);
-    if (merged.videos.length > 0) return merged;
-
-    try {
-        const videos = await loadKinopoiskUnofficialVideos(source.externalId);
-        return { ...merged, videos };
-    } catch {
-        return merged;
-    }
-}
-
 export function mergeKinopoiskRefreshDetails(
     primary: MovieLookupDetails,
     kinopoiskDev: MovieLookupDetails | null,
@@ -118,24 +78,53 @@ export function mergeKinopoiskRefreshDetails(
     };
 }
 
-const productionDependencies: MovieMetadataRefreshDependencies = {
-    search: searchKinopoisk,
-    load: loadKinopoiskDetails,
-};
+export function createProductionDependencies(): MovieMetadataRefreshDependencies {
+    const searchDetails = new Map<string, MovieLookupDetails>();
+    return {
+        search: async (title, kind) => {
+            const details = await lookupKinopoiskRefreshCandidates(title, kind);
+            for (const candidate of details) {
+                if (candidate.externalId) searchDetails.set(candidate.externalId, candidate);
+            }
+            return details;
+        },
+        load: async (source) => {
+            const cached = source.provider === 'kinopoisk-dev'
+                ? searchDetails.get(source.externalId)
+                : null;
+            const movie = cached ?? await loadKinopoiskRefreshCandidate(source.externalId);
+            if (!movie) return null;
+
+            const [ seasons, videos ] = await Promise.all([
+                movie.kind === 'SERIES'
+                    ? loadKinopoiskUnofficialRefreshSeasons(source.externalId)
+                    : Promise.resolve([]),
+                loadKinopoiskUnofficialVideos(source.externalId, { throwOnProviderError: true }),
+            ]);
+            return movieLookupDetailsSchema.parse({
+                ...movie,
+                ...seriesMetadataSummary(seasons),
+                seasons,
+                videos,
+            });
+        },
+    };
+}
 
 function matchingDetails(
     movie: MovieMetadataRefreshRecord,
     details: MovieLookupDetails | null,
 ) {
     if (!details) return null;
-    return selectExactMetadataCandidate(movie, [ details ]).status === 'matched'
+    return hasUsableMovieLookupDetails(details)
+        && selectExactMetadataCandidate(movie, [ details ]).status === 'matched'
         ? details
         : null;
 }
 
 export async function resolveMovieMetadataRefresh(
     movie: MovieMetadataRefreshRecord,
-    dependencies: MovieMetadataRefreshDependencies = productionDependencies,
+    dependencies: MovieMetadataRefreshDependencies = createProductionDependencies(),
 ): Promise<MovieMetadataRefreshResolution> {
     try {
         const savedSource = savedKinopoiskSource(movie);
@@ -157,7 +146,8 @@ export async function resolveMovieMetadataRefresh(
         return details
             ? { status: 'matched-by-search', details }
             : { status: 'failed', reason: 'candidate-details-unavailable' };
-    } catch {
+    } catch (error) {
+        if (isMovieLookupQuotaError(error)) throw error;
         return { status: 'failed', reason: 'provider-error' };
     }
 }

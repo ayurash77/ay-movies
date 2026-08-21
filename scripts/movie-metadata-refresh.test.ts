@@ -15,10 +15,12 @@ import type {
 } from '../src/lib/movie-lookup-types';
 import {
     applyMovieMetadataRefresh,
+    createProductionDependencies,
     mergeKinopoiskRefreshDetails,
     prepareMovieMetadataRefresh,
     resolveMovieMetadataRefresh,
 } from '../src/server/movie-metadata-refresh';
+import { MovieLookupQuotaError } from '../src/server/movie-lookup-provider-errors';
 import {
     parseMetadataRefreshArgs,
     runMovieMetadataRefresh,
@@ -317,6 +319,228 @@ test('metadata refresh searches records without a Kinopoisk id', async () => {
     assert.equal(loadedId, '573209');
 });
 
+test('production metadata refresh reuses rich search details without refetching the movie', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousDevToken = process.env.KINOPOISK_DEV_TOKEN;
+    const previousUnofficialToken = process.env.KINOPOISK_UNOFFICIAL_TOKEN;
+    const requests: URL[] = [];
+    process.env.KINOPOISK_DEV_TOKEN = 'dev-token';
+    process.env.KINOPOISK_UNOFFICIAL_TOKEN = 'unofficial-token';
+    globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+        requests.push(url);
+        if (url.hostname === 'api.kinopoisk.dev' && url.pathname === '/v1.4/movie/search') {
+            return Response.json({
+                docs: [ {
+                    id: 573209,
+                    name: 'Сенна',
+                    alternativeName: 'Senna',
+                    type: 'movie',
+                    year: 2010,
+                    rating: { kp: 8.2 },
+                } ],
+            });
+        }
+        if (url.hostname === 'kinopoiskapiunofficial.tech' && url.pathname === '/api/v2.2/films/573209/videos') {
+            return Response.json({ items: [] });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+    };
+
+    try {
+        const dependencies = createProductionDependencies();
+        const candidates = await dependencies.search('Сенна', 'MOVIE');
+        assert.equal(candidates.length, 1);
+        const loaded = await dependencies.load({
+            provider: 'kinopoisk-dev',
+            externalId: '573209',
+        });
+        assert.ok(loaded);
+        const result = await resolveMovieMetadataRefresh(movie(), {
+            search: async () => candidates,
+            load: async () => loaded,
+        });
+
+        assert.equal(result.status, 'matched-by-search');
+        assert.deepEqual(
+            requests.map((url) => `${url.hostname}${url.pathname}`),
+            [
+                'api.kinopoisk.dev/v1.4/movie/search',
+                'kinopoiskapiunofficial.tech/api/v2.2/films/573209/videos',
+            ],
+        );
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousDevToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousDevToken;
+        if (previousUnofficialToken === undefined) delete process.env.KINOPOISK_UNOFFICIAL_TOKEN;
+        else process.env.KINOPOISK_UNOFFICIAL_TOKEN = previousUnofficialToken;
+    }
+});
+
+test('production metadata refresh loads a saved id through the bounded strict path', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousDevToken = process.env.KINOPOISK_DEV_TOKEN;
+    const previousUnofficialToken = process.env.KINOPOISK_UNOFFICIAL_TOKEN;
+    const requests: URL[] = [];
+    process.env.KINOPOISK_DEV_TOKEN = 'dev-token';
+    process.env.KINOPOISK_UNOFFICIAL_TOKEN = 'unofficial-token';
+    globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+        requests.push(url);
+        if (url.hostname === 'api.kinopoisk.dev' && url.pathname === '/v1.4/movie/573209') {
+            return Response.json({
+                id: 573209,
+                name: 'Сенна',
+                alternativeName: 'Senna',
+                type: 'movie',
+                year: 2010,
+                rating: { kp: 8.2 },
+            });
+        }
+        if (url.hostname === 'kinopoiskapiunofficial.tech' && url.pathname === '/api/v2.2/films/573209/videos') {
+            return Response.json({ items: [] });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+    };
+
+    try {
+        const result = await resolveMovieMetadataRefresh(movie({
+            metadataProvider: 'kinopoisk-dev',
+            metadataExternalId: '573209',
+        }));
+
+        assert.equal(result.status, 'matched-by-id');
+        assert.deepEqual(
+            requests.map((url) => `${url.hostname}${url.pathname}`),
+            [
+                'api.kinopoisk.dev/v1.4/movie/573209',
+                'kinopoiskapiunofficial.tech/api/v2.2/films/573209/videos',
+            ],
+        );
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousDevToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousDevToken;
+        if (previousUnofficialToken === undefined) delete process.env.KINOPOISK_UNOFFICIAL_TOKEN;
+        else process.env.KINOPOISK_UNOFFICIAL_TOKEN = previousUnofficialToken;
+    }
+});
+
+test('production series refresh keeps Dev under quota by loading seasons from Unofficial', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousDevToken = process.env.KINOPOISK_DEV_TOKEN;
+    const previousUnofficialToken = process.env.KINOPOISK_UNOFFICIAL_TOKEN;
+    const requests: URL[] = [];
+    process.env.KINOPOISK_DEV_TOKEN = 'dev-token';
+    process.env.KINOPOISK_UNOFFICIAL_TOKEN = 'unofficial-token';
+    globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+        requests.push(url);
+        if (url.hostname === 'api.kinopoisk.dev' && url.pathname === '/v1.4/movie/search') {
+            return Response.json({
+                docs: [ {
+                    id: 464963,
+                    name: 'Игра престолов',
+                    alternativeName: 'Game of Thrones',
+                    type: 'tv-series',
+                    year: 2011,
+                } ],
+            });
+        }
+        if (url.pathname === '/api/v2.2/films/464963/seasons') {
+            return Response.json({
+                items: [ {
+                    number: 1,
+                    episodes: [ {
+                        seasonNumber: 1,
+                        episodeNumber: 1,
+                        nameRu: 'Зима близко',
+                        nameEn: 'Winter Is Coming',
+                        releaseDate: '2011-04-17',
+                    } ],
+                } ],
+            });
+        }
+        if (url.pathname === '/api/v2.2/films/464963/videos') {
+            return Response.json({ items: [] });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+    };
+
+    try {
+        const result = await resolveMovieMetadataRefresh(movie({
+            kind: 'SERIES',
+            title: 'Игра престолов',
+            year: 2011,
+        }));
+
+        assert.equal(result.status, 'matched-by-search');
+        if (result.status === 'matched-by-search') {
+            assert.equal(result.details.seasons[0]?.episodes[0]?.name, 'Зима близко');
+        }
+        assert.deepEqual(
+            requests.map((url) => `${url.hostname}${url.pathname}`),
+            [
+                'api.kinopoisk.dev/v1.4/movie/search',
+                'kinopoiskapiunofficial.tech/api/v2.2/films/464963/seasons',
+                'kinopoiskapiunofficial.tech/api/v2.2/films/464963/videos',
+            ],
+        );
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousDevToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousDevToken;
+        if (previousUnofficialToken === undefined) delete process.env.KINOPOISK_UNOFFICIAL_TOKEN;
+        else process.env.KINOPOISK_UNOFFICIAL_TOKEN = previousUnofficialToken;
+    }
+});
+
+test('production metadata refresh exposes quota exhaustion while loading a saved id', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+    process.env.KINOPOISK_DEV_TOKEN = 'dev-token';
+    globalThis.fetch = async () => new Response(null, { status: 403 });
+
+    try {
+        await assert.rejects(
+            resolveMovieMetadataRefresh(movie({
+                metadataProvider: 'kinopoisk-dev',
+                metadataExternalId: '573209',
+            })),
+            (error: unknown) => error instanceof MovieLookupQuotaError
+                && error.provider === 'kinopoisk-dev',
+        );
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+    }
+});
+
+test('metadata refresh does not prepare a series without usable episodes', async () => {
+    const result = await resolveMovieMetadataRefresh(
+        movie({ kind: 'SERIES', title: 'Игра престолов', year: 2011 }),
+        {
+            search: async () => [ candidate({
+                kind: 'SERIES',
+                title: 'Игра престолов',
+                originalTitle: 'Game of Thrones',
+                year: 2011,
+            }) ],
+            load: async () => details({
+                kind: 'SERIES',
+                title: 'Игра престолов',
+                originalTitle: 'Game of Thrones',
+                year: 2011,
+                seasons: [],
+            }),
+        },
+    );
+
+    assert.deepEqual(result, { status: 'failed', reason: 'candidate-details-unavailable' });
+});
+
 test('metadata refresh preserves ambiguous search result without loading details', async () => {
     let loads = 0;
     const result = await resolveMovieMetadataRefresh(movie(), {
@@ -575,4 +799,34 @@ test('metadata refresh apply writes prepared movies and counts safe skips', asyn
     assert.equal(report.updated, 1);
     assert.equal(report.duplicateConflict, 1);
     assert.equal(report.notFound, 1);
+});
+
+test('metadata refresh stops immediately when a provider quota is exhausted', async () => {
+    let resolveCalls = 0;
+    const records = [ movie(), movie({ id: 'second' }) ];
+    const dependencies = {
+        listMovies: async () => records,
+        resolve: async () => {
+            resolveCalls += 1;
+            throw new MovieLookupQuotaError('kinopoisk-dev', 403);
+        },
+        prepare: async () => ({
+            status: 'ready' as const,
+            plan: buildMovieMetadataRefreshPlan(records[0]!, details()),
+        }),
+        apply: async () => ({ status: 'updated' as const }),
+        sleep: async () => {},
+        log: () => {},
+    };
+
+    await assert.rejects(
+        runMovieMetadataRefresh(
+            { apply: true, limit: undefined, movieId: undefined, delayMs: 0 },
+            dependencies,
+        ),
+        (error: unknown) => error instanceof MovieLookupQuotaError
+            && error.provider === 'kinopoisk-dev'
+            && error.status === 403,
+    );
+    assert.equal(resolveCalls, 1);
 });

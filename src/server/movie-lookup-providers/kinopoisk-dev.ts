@@ -19,6 +19,7 @@ import {
     type SeriesSeasonMetadata,
 } from '@/lib/movie-lookup-types';
 import { normalizeSeriesMetadata, seriesMetadataSummary } from '@/lib/series-metadata';
+import { MovieLookupQuotaError } from '@/server/movie-lookup-provider-errors';
 
 type KinopoiskName = { name?: string | null };
 type KinopoiskPerson = {
@@ -492,6 +493,7 @@ async function kinopoiskJson<T>(
     path: string,
     params?: URLSearchParams,
     signal?: AbortSignal,
+    strict = false,
 ): Promise<T | null> {
     const config = getKinopoiskConfig();
     if (!config) return null;
@@ -505,9 +507,16 @@ async function kinopoiskJson<T>(
                 'X-API-KEY': config.token,
             },
         });
-        if (!res.ok) return null;
+        if (!res.ok) {
+            if (strict && [ 402, 403, 429 ].includes(res.status)) {
+                throw new MovieLookupQuotaError('kinopoisk-dev', res.status);
+            }
+            if (strict) throw new Error(`kinopoisk-dev HTTP ${res.status}`);
+            return null;
+        }
         return (await res.json()) as T;
-    } catch {
+    } catch (error) {
+        if (strict) throw error;
         return null;
     }
 }
@@ -643,6 +652,66 @@ export async function lookupKinopoiskCandidates(title: string, kind?: MovieKind)
         .map((doc) => mapKinopoiskMovie(doc))
         .filter((candidate): candidate is MovieLookupCandidate => Boolean(candidate))
         .filter((candidate) => !kind || candidate.kind === kind);
+}
+
+export async function lookupKinopoiskRefreshCandidates(
+    title: string,
+    kind?: MovieKind,
+): Promise<MovieLookupDetails[]> {
+    const params = new URLSearchParams({ query: title, limit: '10' });
+    const json = await kinopoiskJson<KinopoiskSearchResponse>(
+        '/v1.4/movie/search',
+        params,
+        undefined,
+        true,
+    );
+
+    return (json?.docs ?? []).flatMap((movie) => {
+        const details = mapKinopoiskRefreshDetails(movie);
+        return details && (!kind || details.kind === kind) ? [ details ] : [];
+    });
+}
+
+function mapKinopoiskRefreshDetails(movie: KinopoiskMovie) {
+    const candidate = mapKinopoiskMovie(movie);
+    if (!candidate) return null;
+    const parsed = movieLookupDetailsSchema.safeParse({
+        ...candidate,
+        seasons: [],
+        ...mapKinopoiskRichMetadata(movie),
+        videos: [],
+    });
+    return parsed.success ? parsed.data : null;
+}
+
+export async function loadKinopoiskRefreshCandidate(externalId: string) {
+    const parsedMovieId = kinopoiskExternalIdSchema.safeParse(externalId);
+    if (!parsedMovieId.success) return null;
+    const movie = await kinopoiskJson<KinopoiskMovie>(
+        `/v1.4/movie/${encodeURIComponent(parsedMovieId.data)}`,
+        undefined,
+        undefined,
+        true,
+    );
+    return movie ? mapKinopoiskRefreshDetails(movie) : null;
+}
+
+export async function loadKinopoiskRefreshSeasons(externalId: string) {
+    const parsedMovieId = kinopoiskExternalIdSchema.safeParse(externalId);
+    if (!parsedMovieId.success) return [];
+    const params = new URLSearchParams({
+        movieId: parsedMovieId.data,
+        limit: '250',
+        sortField: 'number',
+        sortType: '1',
+    });
+    const json = await kinopoiskJson<KinopoiskSeasonResponse>(
+        '/v1.4/season',
+        params,
+        undefined,
+        true,
+    );
+    return mapKinopoiskSeasons(json?.docs ?? []);
 }
 
 export async function loadKinopoiskCandidate(externalId: string): Promise<MovieLookupDetails | null> {
