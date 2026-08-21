@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+    mergeMovieVideoSources,
+    movieVideoEmbedUrl,
     movieVideoSnapshotSchema,
     normalizeMovieVideoSnapshot,
 } from '../src/lib/movie-videos';
@@ -114,4 +116,37 @@ test('video snapshot schema enforces the provider item limit', () => {
     }));
 
     assert.equal(movieVideoSnapshotSchema.safeParse(oversized).success, false);
+});
+
+test('automatic videos precede deduplicated manual links', () => {
+    const automatic = [ {
+        provider: 'kinopoisk-unofficial' as const,
+        site: 'YOUTUBE',
+        title: 'Официальный трейлер',
+        kind: 'TRAILER' as const,
+        url: 'https://www.youtube.com/watch?v=abc123def45',
+        position: 0,
+    } ];
+
+    const merged = mergeMovieVideoSources(automatic, [
+        'https://youtu.be/abc123def45',
+        'https://vimeo.com/123456',
+    ]);
+
+    assert.deepEqual(merged.map((video) => [ video.origin, video.title ]), [
+        [ 'automatic', 'Официальный трейлер' ],
+        [ 'manual', 'Трейлер 1' ],
+    ]);
+});
+
+test('embed conversion only accepts supported player URLs', () => {
+    assert.equal(
+        movieVideoEmbedUrl('https://youtu.be/abc123def45'),
+        'https://www.youtube.com/embed/abc123def45',
+    );
+    assert.equal(
+        movieVideoEmbedUrl('https://widgets.kinopoisk.ru/discovery/trailer/42'),
+        'https://widgets.kinopoisk.ru/discovery/trailer/42',
+    );
+    assert.equal(movieVideoEmbedUrl('https://example.com/video'), null);
 });

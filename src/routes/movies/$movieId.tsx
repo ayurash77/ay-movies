@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { createFileRoute, Link, notFound, useRouter } from '@tanstack/react-router';
-import { ArrowLeft, Clock, Clapperboard, ExternalLink, Globe, Pencil, PlayCircle, Tv, User } from 'lucide-react';
+import { ArrowLeft, Clock, ExternalLink, Globe, Pencil, Tv, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -9,6 +9,7 @@ import { ReviewsSection } from '@/components/movies/ReviewsSection';
 import { MovieCast } from '@/components/movies/MovieCast';
 import { MoviePoster } from '@/components/movies/MoviePoster';
 import { MovieRatings } from '@/components/movies/MovieRatings';
+import { MovieTrailers } from '@/components/movies/MovieTrailers';
 import { SeriesSeasons } from '@/components/movies/SeriesSeasons';
 import { WatchButtons } from '@/components/movies/WatchButtons';
 import { Button } from '@/components/ui/button';
@@ -17,27 +18,6 @@ import type { MovieDetails } from '@/lib/movie-data';
 import { normalizeStoredGenres } from '@/lib/movie-merge';
 import { getMovie, rateMovie } from '@/server/movies';
 import { getReviews, type MovieReview } from '@/server/reviews';
-
-function trailerEmbedUrl(url: string) {
-    try {
-        const parsed = new URL(url);
-        if (parsed.hostname.includes('youtube.com')) {
-            const id = parsed.searchParams.get('v');
-            return id ? `https://www.youtube.com/embed/${id}` : null;
-        }
-        if (parsed.hostname === 'youtu.be') {
-            const id = parsed.pathname.replace(/^\/+/, '');
-            return id ? `https://www.youtube.com/embed/${id}` : null;
-        }
-        if (parsed.hostname.includes('vimeo.com')) {
-            const id = parsed.pathname.split('/').filter(Boolean)[0];
-            return id ? `https://player.vimeo.com/video/${id}` : null;
-        }
-    } catch {
-        return null;
-    }
-    return null;
-}
 
 function seriesMeta(movie: { seasonsCount: number | null; episodesPerSeason: number[] }) {
     const seasons = movie.seasonsCount ? `${movie.seasonsCount} сез.` : null;
@@ -59,46 +39,6 @@ function watchLinkLabel(url: string) {
 function safeReturnPath(value?: string) {
     if (!value || !value.startsWith('/') || value.startsWith('//')) return '/';
     return value;
-}
-
-function TrailerSection({ movie }: { movie: Pick<MovieDetails, 'title' | 'trailerUrls'> }) {
-    if (movie.trailerUrls.length === 0) return null;
-
-    return (
-        <section className="flex flex-col gap-3">
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-                <Clapperboard className="size-5 text-primary"/>
-                {movie.trailerUrls.length > 1 ? 'Трейлеры' : 'Трейлер'}
-            </h2>
-            <div className="grid gap-3 md:grid-cols-2">
-                {movie.trailerUrls.map((url, index) => {
-                    const embedUrl = trailerEmbedUrl(url);
-                    return embedUrl ? (
-                        <div
-                            key={`${url}-${index}`}
-                            className="aspect-video overflow-hidden rounded-lg border border-border bg-background"
-                        >
-                            <iframe
-                                src={embedUrl}
-                                title={`Трейлер ${index + 1}: ${movie.title}`}
-                                className="size-full"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                allowFullScreen
-                            />
-                        </div>
-                    ) : (
-                        <Button key={`${url}-${index}`} asChild variant="outline" className="self-start">
-                            <a href={url} target="_blank" rel="noreferrer">
-                                <PlayCircle/>
-                                Открыть трейлер {movie.trailerUrls.length > 1 ? index + 1 : ''}
-                                <ExternalLink/>
-                            </a>
-                        </Button>
-                    );
-                })}
-            </div>
-        </section>
-    );
 }
 
 function WatchLinksSection({ movie }: { movie: Pick<MovieDetails, 'watchLinks'> }) {
@@ -132,7 +72,12 @@ function AboutSection({ movie, reviews, isAuthed, onRate }: {
 }) {
     return (
         <div className="flex flex-col gap-6">
-            <TrailerSection movie={movie}/>
+            <MovieTrailers
+                title={movie.title}
+                posterUrl={movie.posterUrl}
+                automaticVideos={movie.videos}
+                manualUrls={movie.trailerUrls}
+            />
             <section className="flex flex-col gap-4">
                 <h2 className="text-lg font-semibold">Описание</h2>
                 <p className="whitespace-pre-line leading-relaxed text-foreground/90">

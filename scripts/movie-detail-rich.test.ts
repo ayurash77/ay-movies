@@ -100,7 +100,7 @@ test('about section composes trailers, description, ratings, cast, watch links, 
     const section = detail.slice(sectionStart, sectionEnd);
 
     const orderedParts = [
-        '<TrailerSection',
+        '<MovieTrailers',
         'Описание',
         '<MovieRatings',
         '<MovieCast',

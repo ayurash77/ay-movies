@@ -27,6 +27,14 @@ export const movieVideoSnapshotSchema = z.array(movieVideoMetadataSchema)
 
 export type MovieVideoMetadata = z.infer<typeof movieVideoMetadataSchema>;
 
+export type DisplayMovieVideo = Pick<
+    MovieVideoMetadata,
+    'site' | 'title' | 'kind' | 'url' | 'position'
+> & {
+    origin: 'automatic' | 'manual';
+    sourceLabel: string;
+};
+
 type SupportedVideoUrl = {
     key: string;
     url: string;
@@ -103,4 +111,93 @@ export function normalizeMovieVideoSnapshot(value: unknown): MovieVideoMetadata[
         })
         .slice(0, MOVIE_VIDEO_LIMITS.maxItems)
         .map((video, position) => ({ ...video, position }));
+}
+
+function videoSourceLabel(url: string, site?: string) {
+    const normalizedSite = site?.trim().toUpperCase();
+    if (normalizedSite?.includes('YOUTUBE')) return 'YouTube';
+    if (normalizedSite?.includes('VIMEO')) return 'Vimeo';
+    if (normalizedSite?.includes('KINOPOISK')) return 'Кинопоиск';
+
+    try {
+        const hostname = new URL(url).hostname.replace(/^www\./, '');
+        if (hostname === 'youtu.be' || hostname === 'youtube.com') return 'YouTube';
+        if (hostname === 'vimeo.com') return 'Vimeo';
+        if (hostname === 'widgets.kinopoisk.ru') return 'Кинопоиск';
+        return hostname.slice(0, MOVIE_VIDEO_LIMITS.maxSiteLength);
+    } catch {
+        return 'Ссылка';
+    }
+}
+
+function displayVideoKey(value: string) {
+    const supported = supportedMovieVideoUrl(value);
+    if (supported) return supported.key;
+
+    try {
+        const url = new URL(value);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+        url.hash = '';
+        return `manual:${url.toString()}`;
+    } catch {
+        return null;
+    }
+}
+
+export function mergeMovieVideoSources(
+    automatic: MovieVideoMetadata[],
+    manualUrls: string[],
+): DisplayMovieVideo[] {
+    const normalizedAutomatic = normalizeMovieVideoSnapshot(automatic);
+    const seen = new Set<string>();
+    const merged: DisplayMovieVideo[] = [];
+
+    for (const video of normalizedAutomatic) {
+        const key = displayVideoKey(video.url);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        merged.push({
+            site: video.site,
+            title: video.title,
+            kind: video.kind,
+            url: video.url,
+            position: merged.length,
+            origin: 'automatic',
+            sourceLabel: videoSourceLabel(video.url, video.site),
+        });
+    }
+
+    let manualPosition = 0;
+    for (const value of manualUrls) {
+        const url = value.trim();
+        const key = displayVideoKey(url);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        manualPosition++;
+        merged.push({
+            site: 'MANUAL',
+            title: `Трейлер ${manualPosition}`,
+            kind: 'TRAILER',
+            url,
+            position: merged.length,
+            origin: 'manual',
+            sourceLabel: videoSourceLabel(url),
+        });
+    }
+
+    return merged;
+}
+
+export function movieVideoEmbedUrl(value: string) {
+    const supported = supportedMovieVideoUrl(value);
+    if (!supported) return null;
+
+    if (supported.key.startsWith('youtube:')) {
+        return `https://www.youtube.com/embed/${supported.key.slice('youtube:'.length)}`;
+    }
+    if (supported.key.startsWith('vimeo:')) {
+        return `https://player.vimeo.com/video/${supported.key.slice('vimeo:'.length)}`;
+    }
+    if (supported.key.startsWith('kinopoisk:')) return supported.url;
+    return null;
 }
