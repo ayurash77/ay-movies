@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, MapPin, Ruler, UserRound } from 'lucide-react';
 
 import { PageTitle } from '@/components/AppTitle';
 import { PersonFilmography } from '@/components/people/PersonFilmography';
 import { Button } from '@/components/ui/button';
+import { ProgressiveImage } from '@/components/ui/progressive-image';
 import type { PersonProfile } from '@/lib/person-data';
 import { getPerson } from '@/server/people';
 
@@ -40,22 +41,18 @@ export function personBackAction(historyLength: number) {
 }
 
 export function PersonPortrait({ person }: { person: PersonProfile }) {
-    const [ failed, setFailed ] = useState(false);
-
-    if (!person.photoUrl || failed) {
-        return (
-            <div className="grid aspect-2/3 w-full place-items-center bg-muted">
-                <UserRound className="size-14 text-muted-foreground/55"/>
-            </div>
-        );
-    }
-
     return (
-        <img
-            src={person.photoUrl}
+        <ProgressiveImage
+            src={person.photoUrl ?? undefined}
             alt={person.name}
-            onError={() => setFailed(true)}
-            className="aspect-2/3 w-full object-cover"
+            loading="lazy"
+            wrapperClassName="aspect-2/3 w-full"
+            className="object-cover"
+            fallback={(
+                <div className="grid size-full place-items-center bg-muted">
+                    <UserRound className="size-14 text-muted-foreground/55"/>
+                </div>
+            )}
         />
     );
 }

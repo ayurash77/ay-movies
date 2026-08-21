@@ -3,28 +3,24 @@ import { Link } from '@tanstack/react-router';
 import { UserRound, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ProgressiveImage } from '@/components/ui/progressive-image';
 import type { MovieCastPerson } from '@/lib/movie-data';
 
 const INITIAL_CAST_COUNT = 8;
 
 function CastPortrait({ member }: { member: MovieCastPerson }) {
-    const [ failed, setFailed ] = useState(false);
-
-    if (!member.photoUrl || failed) {
-        return (
-            <div className="grid size-12 shrink-0 place-items-center rounded-full bg-muted">
-                <UserRound className="size-5 text-muted-foreground/55"/>
-            </div>
-        );
-    }
-
     return (
-        <img
-            src={member.photoUrl}
+        <ProgressiveImage
+            src={member.photoUrl ?? undefined}
             alt=""
             loading="lazy"
-            onError={() => setFailed(true)}
-            className="size-12 shrink-0 rounded-full object-cover"
+            wrapperClassName="size-12 shrink-0 rounded-full"
+            className="size-12 rounded-full object-cover"
+            fallback={(
+                <div className="grid size-full place-items-center bg-muted">
+                    <UserRound className="size-5 text-muted-foreground/55"/>
+                </div>
+            )}
         />
     );
 }

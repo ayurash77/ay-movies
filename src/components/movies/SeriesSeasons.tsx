@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ImageOff } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ProgressiveImage } from '@/components/ui/progressive-image';
 import type { MovieDetails } from '@/lib/movie-data';
 import type { SeriesEpisodeMetadata, SeriesSeasonMetadata } from '@/lib/series-metadata';
 import { cn } from '@/lib/utils';
@@ -138,11 +140,17 @@ function EpisodeRow({ episode, seriesTitle }: { episode: SeriesEpisodeMetadata; 
     return (
         <li className="grid min-w-0 gap-3 border-b border-border/50 pb-5 last:border-b-0 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4">
             {episode.stillUrl ? (
-                <img
+                <ProgressiveImage
                     src={episode.stillUrl}
                     alt={`Кадр из серии ${number}: ${name} (${seriesTitle})`}
                     loading="lazy"
-                    className="aspect-video w-full rounded-md object-cover shadow-sm sm:w-40"
+                    wrapperClassName="aspect-video w-full rounded-md shadow-sm sm:w-40"
+                    className="object-cover"
+                    fallback={(
+                        <div className="grid size-full place-items-center bg-muted text-muted-foreground">
+                            <ImageOff className="size-5" aria-hidden="true"/>
+                        </div>
+                    )}
                 />
             ) : null}
             <div className={cn('flex min-w-0 flex-col gap-1', !episode.stillUrl && 'sm:col-span-2')}>

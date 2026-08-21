@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Clapperboard, ExternalLink, Film, Play } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ProgressiveImage } from '@/components/ui/progressive-image';
 import {
     Dialog,
     DialogContent,
@@ -30,18 +31,18 @@ type VideoCardProps = {
 function VideoVisual({ posterUrl, title }: { posterUrl: string | null; title: string }) {
     return (
         <div className="relative aspect-video overflow-hidden bg-muted">
-            {posterUrl ? (
-                <img
-                    src={posterUrl}
-                    alt=""
-                    loading="lazy"
-                    className="size-full object-cover"
-                />
-            ) : (
-                <div className="flex size-full items-center justify-center text-muted-foreground">
-                    <Film className="size-10" aria-hidden="true"/>
-                </div>
-            )}
+            <ProgressiveImage
+                src={posterUrl ?? undefined}
+                alt=""
+                loading="lazy"
+                wrapperClassName="absolute inset-0"
+                className="object-cover"
+                fallback={(
+                    <div className="flex size-full items-center justify-center text-muted-foreground">
+                        <Film className="size-10" aria-hidden="true"/>
+                    </div>
+                )}
+            />
             <div className="absolute inset-0 bg-black/25" aria-hidden="true"/>
             <span
                 className="absolute left-1/2 top-1/2 inline-flex size-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-background/85 text-foreground shadow-lg backdrop-blur-sm"
