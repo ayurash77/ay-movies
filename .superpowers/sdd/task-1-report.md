@@ -15,6 +15,13 @@
 - При ошибке любого person batch возвращается исходный cast с исходными ролями.
 - Реализация зафиксирована коммитом `28ce9b3` (`feat(movies): enrich Kinopoisk cast roles`).
 
+## Review fix
+
+- Добавлены runtime guards для `docs`, person entries и `person.movies`; malformed HTTP 200 payload теперь ведет к fallback исходного cast.
+- Credit выбирается по совпадающему ID фильма и `enProfession === 'actor'`.
+- Добавлены проверки для `docs: {}`, `movies: {}` и нескольких credit одного фильма с producer перед actor.
+- Review fix и этот отчет включены в один commit `fix(movies): guard cast role enrichment payloads`.
+
 ## TDD и команды
 
 1. Добавлены два failing-теста в `scripts/movie-lookup.test.ts`:
@@ -32,6 +39,17 @@
    - Результат: exit code 0.
 5. Проверка diff:
    - Команда: `git diff --check`
+   - Результат: exit code 0.
+
+6. Review fix RED:
+   - Команда: `pnpm test:lookup`
+   - Результат: 33 passed, 2 failed.
+   - Failures: producer credit выбирался вместо actor; malformed `docs` выбрасывал `TypeError`.
+7. Review fix GREEN:
+   - Команда: `pnpm test:lookup`
+   - Результат: 35 passed, 0 failed.
+8. Финальная проверка типов:
+   - Команда: `pnpm typecheck`
    - Результат: exit code 0.
 
 ## Self-review

@@ -320,11 +320,18 @@ test('kinopoisk detail enriches cast roles in batches while preserving cast orde
                 docs: ids.reverse().map((id) => ({
                     id,
                     name: `Актер ${id}`,
-                    movies: [ {
-                        id: 123,
-                        enProfession: 'actor',
-                        description: `Персонаж ${id}`,
-                    } ],
+                    movies: [
+                        {
+                            id: 123,
+                            enProfession: 'producer',
+                            description: `Не роль ${id}`,
+                        },
+                        {
+                            id: 123,
+                            enProfession: 'actor',
+                            description: `Персонаж ${id}`,
+                        },
+                    ],
                 })),
             });
         }
@@ -347,6 +354,61 @@ test('kinopoisk detail enriches cast roles in batches while preserving cast orde
                 role: `Персонаж ${index + 1}`,
             })),
         );
+    } finally {
+        globalThis.fetch = previousFetch;
+        if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;
+        else process.env.KINOPOISK_DEV_TOKEN = previousToken;
+    }
+});
+
+test('kinopoisk detail falls back when person role payload is malformed', async () => {
+    const previousFetch = globalThis.fetch;
+    const previousToken = process.env.KINOPOISK_DEV_TOKEN;
+    const malformedResponses = [
+        Response.json({ docs: {} }),
+        Response.json({ docs: [ { id: 1, movies: {} } ] }),
+    ];
+    let personRequests = 0;
+    process.env.KINOPOISK_DEV_TOKEN = 'test-token';
+    globalThis.fetch = async (input) => {
+        const url = new URL(String(input));
+
+        if (url.pathname === '/v1.4/movie/123') {
+            return Response.json({
+                id: 123,
+                name: 'Тестовый фильм',
+                rating: { kp: 8.1 },
+                votes: { kp: 12 },
+                persons: [ {
+                    id: 1,
+                    name: 'Актер 1',
+                    enProfession: 'actor',
+                    description: null,
+                } ],
+            });
+        }
+        if (url.pathname === '/v1.4/season') return Response.json({ docs: [] });
+        if (url.pathname === '/v1.4/person') return malformedResponses[personRequests++];
+
+        throw new Error(`Unexpected Kinopoisk URL: ${url}`);
+    };
+
+    try {
+        for (let attempt = 0; attempt < malformedResponses.length; attempt++) {
+            const details = await loadKinopoiskCandidate('123');
+
+            assert.equal(details?.title, 'Тестовый фильм');
+            assert.deepEqual(details?.seasons, []);
+            assert.deepEqual(details?.externalRatings, {
+                kinopoisk: { value: 8.1, votes: 12 },
+                imdb: null,
+                russianCritics: null,
+            });
+            assert.deepEqual(details?.cast.map(({ externalId, role }) => ({ externalId, role })), [ {
+                externalId: '1',
+                role: null,
+            } ]);
+        }
     } finally {
         globalThis.fetch = previousFetch;
         if (previousToken === undefined) delete process.env.KINOPOISK_DEV_TOKEN;

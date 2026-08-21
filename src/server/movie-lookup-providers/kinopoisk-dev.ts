@@ -104,7 +104,7 @@ export type KinopoiskSeason = {
 };
 
 type KinopoiskSearchResponse = { docs?: KinopoiskMovie[] };
-type KinopoiskPersonResponse = { docs?: KinopoiskPersonProfile[] };
+type KinopoiskPersonResponse = { docs?: unknown };
 type KinopoiskSeasonResponse = {
     docs?: KinopoiskSeason[];
 };
@@ -536,10 +536,18 @@ async function loadKinopoiskCastRoles(movieId: string, cast: MovieCastMember[]) 
         const response = await kinopoiskJson<KinopoiskPersonResponse>('/v1.4/person', params);
         if (!response) return null;
 
-        for (const person of response.docs ?? []) {
-            const personId = externalId(person.id);
-            const credit = person.movies?.find((movie) => externalId(movie.id) === movieId);
-            const role = boundedText(credit?.description);
+        if (!Array.isArray(response.docs)) return null;
+        for (const person of response.docs) {
+            const personData = record(person);
+            if (!personData || !Array.isArray(personData.movies)) return null;
+
+            const personId = externalId(personData.id);
+            const credit = personData.movies.find((movie) => {
+                const creditData = record(movie);
+                return externalId(creditData?.id) === movieId
+                    && text(creditData?.enProfession) === 'actor';
+            });
+            const role = boundedText(record(credit)?.description);
             if (personId && role) roleByPersonId.set(personId, role);
         }
     }
