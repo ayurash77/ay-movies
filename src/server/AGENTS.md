@@ -29,7 +29,10 @@
   Providers лежат в `movie-lookup-providers/`: `kinopoisk.dev` работает при
   `KINOPOISK_DEV_TOKEN`, `kinopoiskapiunofficial.tech` при
   `KINOPOISK_UNOFFICIAL_TOKEN`; Wikipedia/Wikidata остается fallback без
-  токенов только для базовых метаданных.
+  токенов только для базовых метаданных. Detailed `kinopoisk.dev` дополнительно
+  обогащает отсутствующие роли актеров из filmography персон: batches до 10 ID,
+  concurrency 4 и общий deadline 15 секунд; ошибка любого batch сохраняет
+  исходный ordered cast без частичных ролей.
 - `dashboard.ts` — dashboard, users, friends, followers, roles.
 - `people.ts` — `getPerson` по локальному `Person.id`: cache TTL 7 дней,
   stale fallback, merge partial refresh и 15-минутный retry backoff по
