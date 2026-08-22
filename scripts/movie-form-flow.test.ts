@@ -66,6 +66,15 @@ test('movie edit page refresh shows candidates before merge', () => {
     assert.doesNotMatch(source, /toast\.success\('Данные обновлены'\)/);
 });
 
+test('movie edit lookup does not filter by a possibly incorrect stored kind', () => {
+    const editSource = read('src/routes/movies/$movieId_.edit.tsx');
+    const newSource = read('src/routes/movies/new.tsx');
+
+    assert.match(editSource, /lookupMovieCandidates\(\{ data: \{ title \} \}\)/);
+    assert.doesNotMatch(editSource, /lookupMovieCandidates\(\{ data: \{ title, kind: formDefaults\.kind \} \}\)/);
+    assert.match(newSource, /lookupMovieCandidates\(\{ data: \{ title, kind \} \}\)/);
+});
+
 test('movie form keeps imported series data without manual season inputs', () => {
     const form = read('src/components/movies/MovieForm.tsx');
 

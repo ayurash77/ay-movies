@@ -153,7 +153,7 @@ function EditMoviePage() {
                 toast.warning('Не удалось обновить сохранённый источник. Выполняю поиск по названию.');
             }
 
-            const result = await lookupMovieCandidates({ data: { title, kind: formDefaults.kind } });
+            const result = await lookupMovieCandidates({ data: { title } });
             if (generation !== requestGeneration.current || applyingCandidateRef.current) return;
             if (!result.ok) {
                 toast.error(result.error);
